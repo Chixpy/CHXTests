@@ -2,12 +2,10 @@
 
 Class to run groups of test cases and report errors, failures and other stuff.
 
-CHXTests is standalone and does not require CHXPas or SDL3.
-
 ## Building the examples
 
-Requirements: FPC 3.2+ (tested with 3.3.1). The only non-RTL dependency is
-`TestUtils`, which ships with FPC in `fcl-fpcunit`.
+Requirements: FPC 3.2+ (tested with 3.3.1). No external dependencies beyond
+the FPC RTL.
 
 From the `Examples/` directory:
 

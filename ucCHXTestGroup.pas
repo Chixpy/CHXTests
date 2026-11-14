@@ -10,7 +10,7 @@ unit ucCHXTestGroup;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Generics.Collections,
+  Classes, SysUtils, Generics.Collections,
   utCHXTestResults, ucCHXTestWriter;
 
 resourcestring
@@ -325,10 +325,143 @@ var
 
 implementation
 
-// ToDo: Remove TestUtils dependecy?
 uses
-  Math,
-  TestUtils; // GetMethodList(TObject, TStrings)
+  Math;
+
+{
+  VMT published method table
+
+  The compiler stores the published method table referenced by the VMT.
+  Its count is a DWord at offset 0, but the entries can start after the
+  count or after padding, depending on the target ABI. TypInfo's
+  TVmtMethodTable relies on FPC_REQUIRES_PROPER_ALIGNMENT for this, which
+  does not match every FPC build, so detect the real offset at runtime
+  with a tiny probe class.
+}
+type
+  {$M+}
+  TVmtMethodProbe = class
+  published
+    procedure VmtMethodProbe;
+  end;
+  {$M-}
+
+procedure TVmtMethodProbe.VmtMethodProbe;
+begin
+end;
+
+var
+  VmtMethodEntryOffset : PtrUInt = 0;
+
+function GetVmtMethodEntryOffset : PtrUInt;
+var
+  MethodTable : PByte;
+  Count : DWord;
+  ProbeAddress : CodePointer;
+  Candidate : CodePointer;
+  EntrySize : PtrUInt;
+  Offset : PtrUInt;
+  i : DWord;
+begin
+  if VmtMethodEntryOffset <> 0 then
+    Exit(VmtMethodEntryOffset);
+
+  // Fallback for the usual packed layout.
+  VmtMethodEntryOffset := SizeOf(DWord);
+
+  MethodTable := PByte(PVmt(TVmtMethodProbe)^.vMethodTable);
+  if not Assigned(MethodTable) then
+    Exit(VmtMethodEntryOffset);
+
+  Count := PDWord(MethodTable)^;
+  ProbeAddress := TVmtMethodProbe.MethodAddress('VmtMethodProbe');
+  EntrySize := 2 * SizeOf(Pointer);
+
+  if Count > 0 then
+    for i := 0 to Count - 1 do
+    begin
+      Offset := SizeOf(DWord);
+      Move(PByte(MethodTable + Offset + i * EntrySize + SizeOf(Pointer))^,
+        Candidate, SizeOf(Candidate));
+      if Candidate = ProbeAddress then
+      begin
+        VmtMethodEntryOffset := Offset;
+        Break;
+      end;
+
+      Offset := 2 * SizeOf(DWord);
+      Move(PByte(MethodTable + Offset + i * EntrySize + SizeOf(Pointer))^,
+        Candidate, SizeOf(Candidate));
+      if Candidate = ProbeAddress then
+      begin
+        VmtMethodEntryOffset := Offset;
+        Break;
+      end;
+    end;
+
+  Result := VmtMethodEntryOffset;
+end;
+
+{
+  GetPublishedMethodList
+
+  Enumerate the published methods of a class by walking its VMT method
+  table. This is based on FPC's TestUtils.GetMethodList, kept local to
+  avoid the fcl-fpcunit dependency.
+}
+procedure GetPublishedMethodList(aClass : TClass; aList : TStrings);
+var
+  Vmt : PVmt;
+  MethodTable : PByte;
+  MethodEntry : PByte;
+  MethodNamePtr : PShortString;
+  MethodName : ShortString;
+  Count : DWord;
+  EntryOffset : PtrUInt;
+  EntrySize : PtrUInt;
+  i : DWord;
+  idx : Integer;
+begin
+  if not Assigned(aList) then Exit;
+
+  aList.Clear;
+  EntryOffset := GetVmtMethodEntryOffset;
+  EntrySize := 2 * SizeOf(Pointer);
+  Vmt := PVmt(aClass);
+
+  while Assigned(Vmt) do
+  begin
+    MethodTable := PByte(Vmt^.vMethodTable);
+
+    if Assigned(MethodTable) then
+    begin
+      Count := PDWord(MethodTable)^;
+      MethodEntry := MethodTable + EntryOffset;
+
+      if Count > 0 then
+        for i := 0 to Count - 1 do
+        begin
+          Move(MethodEntry^, MethodNamePtr, SizeOf(MethodNamePtr));
+
+          if Assigned(MethodNamePtr) then
+          begin
+            MethodName := MethodNamePtr^;
+
+            // An overridden method replaces the inherited one.
+            idx := aList.IndexOf(MethodName);
+            if idx >= 0 then
+              aList.Delete(idx);
+
+            aList.Add(MethodName);
+          end;
+
+          Inc(MethodEntry, EntrySize);
+        end;
+    end;
+
+    Vmt := Vmt^.vParent;
+  end;
+end;
 
 {
   cCHXTestGroup
@@ -610,7 +743,7 @@ begin
 
   MethodList := tStringList.Create;
   try
-    GetMethodList(Self, MethodList); // From TestUtils.pas
+    GetPublishedMethodList(Self.ClassType, MethodList);
 
     for aMethodName in MethodList do
     begin
