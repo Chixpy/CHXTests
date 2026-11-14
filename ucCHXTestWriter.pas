@@ -1,0 +1,82 @@
+unit ucCHXTestWriter;
+
+{$mode ObjFPC}{$H+}{$inline OFF}{$OPTIMIZATION OFF}
+{$MODESWITCH FunctionReferences}
+{$MODESWITCH AdvancedRecords}
+{$MODESWITCH TypeHelpers}
+
+interface
+
+uses
+  Generics.Collections, utCHXTestResults;
+
+type
+
+{ cCHXTestWriter }
+
+  cCHXTestWriter = class(tObject)
+  public
+    constructor Create; virtual;
+    destructor Destroy; override;
+
+    procedure OnBeforeStart; virtual;
+    procedure OnTestStart(const TestResult : tCHXTestResults); virtual;
+    procedure OnTestEnd(const TestResult : tCHXTestResults); virtual;
+    procedure OnCaseStart(const TestResult : tCHXTestResults); virtual;
+    procedure OnCaseEnd(const TestResult : tCHXTestResults); virtual;
+    procedure OnAfterEnd(const TestResult : tCHXTestResults); virtual;
+  end;
+
+  tCHXTestWriterClass = class of cCHXTestWriter;
+
+  cCHXTestWriterGenList  = specialize tObjectList<cCHXTestWriter>;
+  cCHXTestWriterList  = class(cCHXTestWriterGenList)
+  end;
+
+implementation
+
+constructor cCHXTestWriter.Create;
+begin
+  inherited Create;
+end;
+
+destructor cCHXTestWriter.Destroy;
+begin
+  inherited Destroy;
+end;
+
+procedure cCHXTestWriter.OnBeforeStart;
+begin
+  // Do nothing by default
+end;
+
+procedure cCHXTestWriter.OnTestStart(const TestResult : TCHXTestResults);
+begin
+  // Do nothing by default
+end;
+
+procedure cCHXTestWriter.OnTestEnd(const TestResult : TCHXTestResults);
+begin
+  // Do nothing by default
+end;
+
+procedure cCHXTestWriter.OnCaseStart(const TestResult : TCHXTestResults);
+begin
+  // Do nothing by default
+end;
+
+procedure cCHXTestWriter.OnCaseEnd(const TestResult : TCHXTestResults);
+begin
+  // Do nothing by default
+end;
+
+procedure cCHXTestWriter.OnAfterEnd(const TestResult : tCHXTestResults);
+begin
+  // Do nothing by default
+end;
+
+initialization
+
+finalization
+
+end.

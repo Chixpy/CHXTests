@@ -1,0 +1,12 @@
+# Build outputs
+Examples/bin/
+Examples/lib/
+
+# FPC artifacts
+*.o
+*.ppu
+*.rsj
+*.a
+
+# Commit message draft
+LastChanges.md

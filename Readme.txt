@@ -1,0 +1,83 @@
+============ CHX Test Runner
+
+Class to run groups of test cases and report errors, failures and other stuff.
+
+========== Simple use program
+
+# Create a `cCHXTestGroup` descendant, with tests procedures in published
+  section.
+# Add a `cCHXTestWriter` descendant class to previous `cCHXTestGroup`.
+# `[cCHXTestGroupChild].RunAllCases`.
+# For more verbosity, compile with optimizations off and `-gl` (`lineinfo`
+  unit) parameter.
+
+---pascal
+program SimpleTest;
+
+// Switch off optimizations
+{$mode ObjFPC}{$H+}{$inline OFF}{$OPTIMIZATION OFF}
+{$MODESWITCH FunctionReferences}
+
+uses
+  ucCHXTestGroup, ucCHXTWConsole;
+
+type
+
+  {$PUSH}
+  {$M+}
+  cTestCases = class(cCHXTestGroup)
+  published
+    procedure ExampleCaseSuccess;
+    procedure ExampleCaseFail;
+  end;
+  {$POP}
+
+{
+  cTestCases
+}
+
+procedure cTestCases.ExampleCaseSuccess;
+begin
+  MustTrue(True);
+end;
+
+procedure cTestCases.ExampleCaseFail;
+begin
+  MustTrue(False);
+end;
+
+{
+  Main program
+}
+
+var
+  MainTest : cTestCases;
+
+begin
+  MainTest := cTestCases.Create;
+  MainTest.AddWriter(cCHXTWConsole);
+  MainTest.RunAllCases;
+  MainTest.Free;
+end.
+---pascal
+
+========== Features
+
+- Simple and functional.
+- Nested subtests can be added as a tree.
+- Test groups and test cases can be disabled.
+- Various Writers can report simultanealy.
+- Testing engine and Test Writers (Listeners / Observers) decoupled.
+- Virtual method at start or end of test cases, (sub)tests and global.
+- Include file `ucCHXTestGroup.inc` for /easy/ creation of asserts for custom
+  types using FPC macros.
+- Recopile statistics about time spent and total assertions made.
+- Writers are notifyed in real time (as /Observer/ pattern like), so a console
+  writer can show some activity while waiting...
+- TODO: `May[x]` methods that don't break current test case and continue
+  executing it. So you don't need to fix them to check next asserts
+  (/Soft Assertions/).
+- TODO: Send status info to listeners. (For example: Progress or debug info.)
+- TODO: Automatically create tree structure based on name.
+- TODO: Auto register testing classes in units. I don't like globals, but in
+  this specific case the program will not do anything more.
