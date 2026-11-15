@@ -70,7 +70,6 @@ begin
   // Adding a writer to a child test...
   SubTest.AddWriter(cCHXTWConsole);
   SubTest.AddChildTest(cTest1a1);
-  MainTest.RunAllCases;
+  ExitCode := MainTest.RunAllCases;
   MainTest.Free;
-  ExitCode := 0;
 end.

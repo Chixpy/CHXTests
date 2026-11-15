@@ -15,6 +15,9 @@ From the `Examples/` directory:
 Executables are written to `Examples/bin` and compiled units to
 `Examples/lib`.
 
+`SelfTest.pas` checks the runner itself: it exits with `0` when all its
+expected results match, and with `1` otherwise.
+
 ## Simple use program
 
 1. Create a `cCHXTestGroup` descendant, with tests procedures in published
@@ -69,10 +72,13 @@ var
 begin
   MainTest := cTestCases.Create;
   MainTest.AddWriter(cCHXTWConsole);
-  MainTest.RunAllCases;
+  ExitCode := MainTest.RunAllCases;
   MainTest.Free;
 end.
 ```
+
+`RunAllCases` returns `0` on success, `1` on failure, `2` on error and `3`
+when nothing was executed (skipped). Assign it to `ExitCode` for batch use.
 
 ## Features
 
@@ -90,8 +96,9 @@ end.
 - Statistics about time spent and total assertions made.
 - Writers are notifyed in real time (like an _Observer_ pattern), so a console
   writer can show some activity while waiting...
-- Returns a value that can be used as a program _exit code_ (for example, for
-  running in a batch).
+- Returns a value that can be used as a program _exit code_ (`0` success,
+  `1` failure, `2` error, `3` skipped/nothing executed), for example for
+  running in a batch.
 - TODO: `May[x]` methods that don't break current test case and continue
   executing it. So you don't need to fix them to check next asserts in the
   case (_Soft Assertions_).

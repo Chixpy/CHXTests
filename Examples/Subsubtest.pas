@@ -68,7 +68,6 @@ begin
   // Adding by class type, parent test frees it on destroy.
   SubTest := MainTest.AddChildTest(cTest1a);
   SubTest.AddChildTest(cTest1a1);
-  MainTest.RunAllCases;
+  ExitCode := MainTest.RunAllCases;
   MainTest.Free;
-  ExitCode := 0;
 end.

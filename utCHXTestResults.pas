@@ -27,6 +27,7 @@ type
     NCases : Cardinal;
     NOwnedCases : Cardinal;
     NSubTests : Cardinal;
+    NSkippedGroups : Cardinal;
 
     NSkip : Cardinal;
     NSuccess : Cardinal;
@@ -58,6 +59,7 @@ begin
 
   Inc(Self.NAsserts, aResult.NAsserts);
   Inc(Self.NSubTests, aResult.NSubTests);
+  Inc(Self.NSkippedGroups, aResult.NSkippedGroups);
   Inc(Self.NCases, aResult.NCases);
   Inc(Self.NSkip, aResult.NSkip);
   Inc(Self.NSuccess, aResult.NSuccess);
@@ -76,6 +78,7 @@ begin
     NCases := 0;
     NOwnedCases := 0;
     NSubTests := 0;
+    NSkippedGroups := 0;
 
     NSkip := 0;
     NSuccess := 0;

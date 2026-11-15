@@ -944,19 +944,37 @@ begin
   end;
 end;
 
+function TestResultExitCode(const aResultType : tCHXTestResultType) : Integer;
+{< Convert a test result to a process exit code.
+
+  `0` success, `1` failure, `2` error. Anything below success (skip, start,
+  none) maps to a sentinel one step above the highest real code, so it does
+  not need to be hardcoded.
+}
+begin
+  Result := Ord(aResultType) - Ord(rtSuccess);
+  if Result < 0 then
+    Result := Ord(High(tCHXTestResultType)) - Ord(rtSuccess) + 1;
+end;
+
 function cCHXTestGroup.RunCase(const CaseName : String) : Integer;
 var
   i : Integer;
   aCase : tTestCase;
 begin
   i := GetCasePos(CaseName);
-  if i = -1 then Exit; // ToDo: Create a TestResults trError.
+  if i = -1 then
+  begin
+    // No case to report: return an error-like result.
+    Result := TestResultExitCode(rtError);
+    Exit;
+  end;
 
   aCase := TestCases[i];
   RunCase(@aCase);
   TestCases[i] := aCase;
 
-  Result := Ord(aCase.TestResults.ResultType) - Ord(rtSuccess);
+  Result := TestResultExitCode(aCase.TestResults.ResultType);
 end;
 
 function cCHXTestGroup.RunCase(TestCase : pTestCase) : Integer;
@@ -1008,7 +1026,7 @@ begin
     NotifyCaseEnd(TestCase^.TestResults);
   end;
 
-  Result := Ord(TestCase^.TestResults.ResultType) - Ord(rtSuccess);
+  Result := TestResultExitCode(TestCase^.TestResults.ResultType);
 end;
 
 function cCHXTestGroup.RunAllCases : Integer;
@@ -1016,53 +1034,66 @@ var
   i : Integer;
   aCase : tTestCase;
   aSubTestGroup : cCHXTestGroup;
+  IsRootTest : Boolean;
 begin
-  if TreeDepth = 0 then
+  IsRootTest := TreeDepth = 0;
+
+  if IsRootTest then
   begin
     DoBeforeStart;
     NotifyBeforeStart;
   end;
 
   TestResultInit;
-  if not Enabled then
-  begin
-    TestResults.ResultType := rtSkip;
-    DoTestEnd;
-    NotifyTestEnd;
-    Exit;
-  end;
 
   TestResults.ResultType := rtStart;
   TestResults.TimeElapsed := GetTickCount64;
   DoTestStart;
   NotifyTestStart;
 
-  // Run a copy and update original
-  for i := 0 to TestCases.Count - 1 do
-  begin
-    aCase := TestCases[i];
-    RunCase(@aCase);
-    TestResults.AddResult(aCase.TestResults);
-    TestCases[i] := aCase;
+  try
+    if not Enabled then
+    begin
+      TestResults.ResultType := rtSkip;
+      Inc(TestResults.NSkippedGroups);
+      TestResults.NSkip := TestResults.NSkip + Cardinal(TestCases.Count);
+    end
+    else if (TestCases.Count = 0) and (TestChilds.Count = 0) then
+    begin
+      // A group without cases or subtests is reported as skipped.
+      TestResults.ResultType := rtSkip;
+      Inc(TestResults.NSkippedGroups);
+    end
+    else
+    begin
+      // Run a copy and update original
+      for i := 0 to TestCases.Count - 1 do
+      begin
+        aCase := TestCases[i];
+        RunCase(@aCase);
+        TestResults.AddResult(aCase.TestResults);
+        TestCases[i] := aCase;
+      end;
+
+      for aSubTestGroup in TestChilds do
+      begin
+        aSubTestGroup.RunAllCases;
+        TestResults.AddResult(aSubTestGroup.TestResults);
+      end;
+    end;
+  finally
+    TestResults.TimeElapsed := GetTickCount64 - TestResults.TimeElapsed;
+    DoTestEnd;
+    NotifyTestEnd;
+
+    if IsRootTest then
+    begin
+      DoAfterEnd;
+      NotifyAfterEnd;
+    end;
   end;
 
-  for aSubTestGroup in TestChilds do
-  begin
-    aSubTestGroup.RunAllCases;
-    TestResults.AddResult(aSubTestGroup.TestResults);
-  end;
-
-  TestResults.TimeElapsed := GetTickCount64 - TestResults.TimeElapsed;
-  DoTestEnd;
-  NotifyTestEnd;
-
-  if TreeDepth = 0 then
-  begin
-    DoAfterEnd;
-    NotifyAfterEnd;
-  end;
-
-  Result := Ord(TestResults.ResultType) - Ord(rtSuccess);
+  Result := TestResultExitCode(TestResults.ResultType);
 end;
 
 procedure RegisterCHXTestGroup(const aTGClass : tCHXTestGroupClass;

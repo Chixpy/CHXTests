@@ -66,7 +66,6 @@ begin
   MainTest.AddWriter(cCHXTWConsole);
   MainTest.AddChildTest(cTest1a);
   MainTest.AddChildTest(cTest1b);
-  MainTest.RunAllCases;
+  ExitCode := MainTest.RunAllCases;
   MainTest.Free;
-  ExitCode := 0;
 end.

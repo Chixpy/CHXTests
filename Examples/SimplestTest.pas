@@ -37,7 +37,6 @@ begin
   MainTest := cTestCases.Create;
   // Writers added by class type are autofreed on test destroy.
   MainTest.AddWriter(cCHXTWConsole);
-  MainTest.RunAllCases;
+  ExitCode := MainTest.RunAllCases;
   MainTest.Free;
-  ExitCode := 0;
 end.

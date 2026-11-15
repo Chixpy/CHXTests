@@ -254,6 +254,8 @@ begin
   WriteLn(IndentStr, Format('%d %s / %d %s / %d %s / %d %s',
     [TestResults.NSkip, ksDefSkip, TestResults.NSuccess, ksDefSuccess,
     TestResults.NFailed, ksDefFail, TestResults.NError, ksDefError]));
+  WriteLn(IndentStr, Format('Groups skipped: %d',
+    [TestResults.NSkippedGroups]));
   WriteLn;
 end;
 
