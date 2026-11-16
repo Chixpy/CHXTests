@@ -1,7 +1,9 @@
 {%MainUnit ucCHXTestGroup.pas}
 (*
-  Include file for creating `Must[x]` asserting methods for `cCHXTestGroup` (or
-  any descendant) for types.
+  Include file for creating `Must[x]` and `May[x]` assertion methods for
+  `cCHXTestGroup` (or any descendant) for types.
+
+  This single include generates both the `Must*` and `May*` methods.
 
   With this unit next methods can be declared an implemented:
     - `MustEqual`, `MustNotEqual` with `=` and `<>` comparisons
@@ -9,6 +11,7 @@
       function.
     - `MustGreater`, `MustLess`, `MustGrtEqu`, `MustLssEqu` with `<`, `>`,
       `<=` and `>=` comparisons.
+    - The corresponding `May*` soft assertions.
 
   For implementation, a function that converts it to a string is needed (to
     show values on failed asserts).
@@ -230,6 +233,175 @@ begin
   if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
 
   MustFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+  {$ENDIF}
+
+{$ENDIF}
+
+// ---- Soft assertions
+
+{$IFDEF TestMethodsDecl}
+
+  {$IFDEF TestEquMethods}
+
+procedure MayEqual(const Value, Correct: CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+procedure MayNotEqual(const Value, Correct : CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+
+  {$ENDIF}
+
+  {$IFDEF TestSameValueMethods}
+
+procedure MayEqual(const Value, Correct, Sigma: CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+procedure MayNotEqual(const Value, Correct, Sigma : CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+
+  {$ENDIF}
+
+  {$IFDEF TestGrtLssMethods}
+
+procedure MayGreater(const Value, Correct : CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+procedure MayLess(const Value, Correct : CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+procedure MayGrtEqu(const Value, Correct : CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+procedure MayLssEqu(const Value, Correct : CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+
+  {$ENDIF}
+
+{$ENDIF}
+
+// ---- Implementation section
+
+{$IFDEF TestMethodsImpl}
+
+  {$IFDEF TestEquMethods}
+
+procedure TestGroupClass.MayEqual(const Value, Correct : CustomType;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if Value = Correct then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsEqualFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+procedure TestGroupClass.MayNotEqual(const Value, Correct : CustomType;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if Value <> Correct then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsNotEqualFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+  {$ENDIF}
+
+  {$IFDEF TestSameValueMethods}
+
+procedure TestGroupClass.MayEqual(const Value, Correct, Sigma: CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+begin
+  Inc(NCaseAsserts);
+  if TypeSameValue(Value, Correct, Sigma) then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsEqualFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+procedure TestGroupClass.MayNotEqual(const Value, Correct, Sigma : CustomType;
+  Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+  overload;
+begin
+  Inc(NCaseAsserts);
+  if not TypeSameValue(Value, Correct, Sigma) then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsNotEqualFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+  {$ENDIF}
+
+  {$IFDEF TestGrtLssMethods}
+
+procedure TestGroupClass.MayGreater(const Value, Correct : CustomType;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if Value > Correct then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsGreaterFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+procedure TestGroupClass.MayLess(const Value, Correct : CustomType;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if Value < Correct then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsLessFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+procedure TestGroupClass.MayGrtEqu(const Value, Correct : CustomType;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if Value >= Correct then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsGrtEquFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
+end;
+
+procedure TestGroupClass.MayLssEqu(const Value, Correct : CustomType;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if Value <= Correct then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsLssEquFmt;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Format(Msg, [FToString(Value), FToString(Correct)]), ErrAdrs);
 end;
 
   {$ENDIF}

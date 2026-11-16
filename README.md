@@ -18,6 +18,9 @@ Executables are written to `Examples/bin` and compiled units to
 `SelfTest.pas` checks the runner itself: it exits with `0` when all its
 expected results match, and with `1` otherwise.
 
+`SoftTest.pas` shows soft assertions: it exits with `0` when its intentional
+soft failures and their combined messages are produced.
+
 ## Simple use program
 
 1. Create a `cCHXTestGroup` descendant, with tests procedures in published
@@ -99,17 +102,18 @@ when nothing was executed (skipped). Assign it to `ExitCode` for batch use.
 - Returns a value that can be used as a program _exit code_ (`0` success,
   `1` failure, `2` error, `3` skipped/nothing executed), for example for
   running in a batch.
-- TODO: `May[x]` methods that don't break current test case and continue
-  executing it. So you don't need to fix them to check next asserts in the
-  case (_Soft Assertions_).
+- `Must*` hard assertions and `May*` soft assertions. A soft failure lets the
+  case continue and marks it as failed at the end; if a later `Must*` fails,
+  both messages are reported.
+- Exception assertions: `MustRaise`, `MustNotRaise`, `MayRaise` and
+  `MayNotRaise`, including method-reference overloads.
 - TODO: Send status info to listeners. (For example: Progress or debug info.).
-- TODO: More assertions for inheritance, class types testing, nil, exceptions.
+- TODO: More assertions for inheritance, class types testing and nil.
   More especifically:
   - String: Empty, _Nil_ (specially `PChar`). Regex matching.
   - Integer types: Positive (for signed), Zero.
   - Float types: Positive, Zero, _Nan_, Infinite (Pos, Neg or both).
   - Interfaces:
   - Classes: Inheritance, Class matching, _Nil_.
-  - Exceptions: Check if an exception is raised?
   - Tecnically all are shortcuts of `if Cond then Fail()` (except exceptions)
 - TODO: Auto register writers...

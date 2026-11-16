@@ -30,6 +30,30 @@ type
     procedure CaseError;
   end;
 
+  cTargetMayPass = class(cCHXTestGroup)
+  private
+    procedure RaiseMethod;
+    procedure NoRaiseMethod;
+  published
+    procedure CaseMayRaiseExpected;
+    procedure CaseMayRaiseDefault;
+    procedure CaseMayRaiseDerived;
+    procedure CaseMayRaiseMethod;
+    procedure CaseMayNotRaiseProc;
+    procedure CaseMayNotRaiseMethod;
+  end;
+
+  cTargetMayFail = class(cCHXTestGroup)
+  private
+    procedure InnerMustFail;
+  published
+    procedure CaseMayRaiseNoException;
+    procedure CaseMayRaiseWrongClass;
+    procedure CaseMayNotRaiseException;
+    procedure CaseMayRaiseInnerFailure;
+    procedure CaseMayNotRaiseInnerFailure;
+  end;
+
   cTargetEmpty = class(cCHXTestGroup)
   end;
 
@@ -41,6 +65,10 @@ type
       aExpected : Cardinal);
     procedure CheckResultType(const aLabel : String;
       const aActual, aExpected : tCHXTestResultType);
+    procedure CheckText(const aLabel, aActual, aExpected : String);
+    procedure CheckContains(const aLabel, aText, aSubText : String);
+    function FindCase(const aGroup : cCHXTestGroup;
+      const aCaseName : String) : tTestCase;
     procedure RaiseExpectedMethod;
     procedure NoRaiseMethod;
     procedure InnerMustFail;
@@ -56,6 +84,7 @@ type
     procedure CheckRunCase;
     procedure CheckMustRaise;
     procedure CheckMustNotRaise;
+    procedure CheckMayExceptionAssertions;
   end;
   {$POP}
 
@@ -102,6 +131,82 @@ begin
 end;
 
 {
+  Soft exception assertion targets
+}
+
+procedure cTargetMayPass.RaiseMethod;
+begin
+  raise EMyError.Create('method expected');
+end;
+
+procedure cTargetMayPass.NoRaiseMethod;
+begin
+end;
+
+procedure cTargetMayPass.CaseMayRaiseExpected;
+begin
+  MayRaise(@RaiseExpectedGlobal, EMyError);
+end;
+
+procedure cTargetMayPass.CaseMayRaiseDefault;
+begin
+  MayRaise(@RaiseOtherGlobal);
+end;
+
+procedure cTargetMayPass.CaseMayRaiseDerived;
+begin
+  MayRaise(@RaiseDerivedGlobal, EMyBase);
+end;
+
+procedure cTargetMayPass.CaseMayRaiseMethod;
+begin
+  MayRaise(@RaiseMethod, EMyError);
+end;
+
+procedure cTargetMayPass.CaseMayNotRaiseProc;
+begin
+  MayNotRaise(@NoRaiseGlobal);
+end;
+
+procedure cTargetMayPass.CaseMayNotRaiseMethod;
+begin
+  MayNotRaise(@NoRaiseMethod);
+end;
+
+procedure cTargetMayFail.CaseMayRaiseNoException;
+begin
+  MayRaise(@NoRaiseGlobal, EMyError);
+  MustTrue(True, 'continued after MayRaise');
+end;
+
+procedure cTargetMayFail.CaseMayRaiseWrongClass;
+begin
+  MayRaise(@RaiseOtherGlobal, EMyError);
+  MustTrue(True, 'continued after wrong exception');
+end;
+
+procedure cTargetMayFail.CaseMayNotRaiseException;
+begin
+  MayNotRaise(@RaiseExpectedGlobal);
+  MustTrue(True, 'continued after MayNotRaise');
+end;
+
+procedure cTargetMayFail.InnerMustFail;
+begin
+  MustTrue(False, 'InnerMayFail', 'inner-may-fail');
+end;
+
+procedure cTargetMayFail.CaseMayRaiseInnerFailure;
+begin
+  MayRaise(@InnerMustFail, Exception);
+end;
+
+procedure cTargetMayFail.CaseMayNotRaiseInnerFailure;
+begin
+  MayNotRaise(@InnerMustFail);
+end;
+
+{
   cSelfTest
 }
 
@@ -141,6 +246,33 @@ begin
   MustTrue(aActual = aExpected, aLabel,
     Format('%s: got %d, expected %d',
     [aLabel, Ord(aActual), Ord(aExpected)]));
+end;
+
+procedure cSelfTest.CheckText(const aLabel, aActual, aExpected : String);
+begin
+  MustTrue(aActual = aExpected, aLabel,
+    Format('%s: got "%s", expected "%s"',
+    [aLabel, aActual, aExpected]));
+end;
+
+procedure cSelfTest.CheckContains(const aLabel, aText, aSubText : String);
+begin
+  MustTrue(Pos(aSubText, aText) > 0, aLabel,
+    Format('%s: "%s" not found in "%s"', [aLabel, aSubText, aText]));
+end;
+
+function cSelfTest.FindCase(const aGroup : cCHXTestGroup;
+  const aCaseName : String) : tTestCase;
+var
+  i : Integer;
+begin
+  for i := 0 to aGroup.TestCases.Count - 1 do
+  begin
+    Result := aGroup.TestCases[i];
+    if Result.CaseName = aCaseName then Exit;
+  end;
+
+  raise Exception.Create('Case not found: ' + aCaseName);
 end;
 
 procedure cSelfTest.CheckSuccess;
@@ -506,6 +638,109 @@ begin
     end;
   end;
   MustTrue(Failed, 'MustNotRaise: inner failure should re-raise');
+end;
+
+procedure cSelfTest.CheckMayExceptionAssertions;
+var
+  PassTarget : cTargetMayPass;
+  FailTarget : cTargetMayFail;
+  PassResults, FailResults : tCHXTestResults;
+  RunCode : Integer;
+  aCase : tTestCase;
+begin
+  PassTarget := cTargetMayPass.Create;
+  try
+    RunCode := PassTarget.RunAllCases;
+    PassResults := PassTarget.TestResults;
+  finally
+    PassTarget.Free;
+  end;
+
+  CheckCode('may pass: code', RunCode, 0);
+  CheckResultType('may pass: type', PassResults.ResultType, rtSuccess);
+  CheckCount('may pass: cases', PassResults.NCases, 6);
+  CheckCount('may pass: success', PassResults.NSuccess, 6);
+  CheckCount('may pass: failed', PassResults.NFailed, 0);
+  CheckCount('may pass: error', PassResults.NError, 0);
+  CheckCount('may pass: asserts', PassResults.NAsserts, 6);
+
+  FailTarget := cTargetMayFail.Create;
+  try
+    RunCode := FailTarget.RunAllCases;
+    FailResults := FailTarget.TestResults;
+
+    aCase := FindCase(FailTarget, 'CaseMayRaiseNoException');
+    CheckResultType('may raise missing: type',
+      aCase.TestResults.ResultType, rtFailed);
+    CheckText('may raise missing: assert',
+      aCase.TestResults.FailedAssert, rsSoftAssertions);
+    CheckContains('may raise missing: reason',
+      aCase.TestResults.Message, 'Expected exception EMyError');
+    CheckContains('may raise missing: soft header',
+      aCase.TestResults.Message, 'Soft failures (1):');
+    CheckCount('may raise missing: asserts',
+      aCase.TestResults.NAsserts, 2);
+
+    aCase := FindCase(FailTarget, 'CaseMayRaiseWrongClass');
+    CheckResultType('may raise wrong: type',
+      aCase.TestResults.ResultType, rtFailed);
+    CheckText('may raise wrong: assert',
+      aCase.TestResults.FailedAssert, rsSoftAssertions);
+    CheckContains('may raise wrong: expected',
+      aCase.TestResults.Message, 'EMyError');
+    CheckContains('may raise wrong: actual',
+      aCase.TestResults.Message, 'EMyOther');
+    CheckContains('may raise wrong: text',
+      aCase.TestResults.Message, 'other');
+    CheckCount('may raise wrong: asserts',
+      aCase.TestResults.NAsserts, 2);
+
+    aCase := FindCase(FailTarget, 'CaseMayNotRaiseException');
+    CheckResultType('may not raise: type',
+      aCase.TestResults.ResultType, rtFailed);
+    CheckText('may not raise: assert',
+      aCase.TestResults.FailedAssert, rsSoftAssertions);
+    CheckContains('may not raise: class',
+      aCase.TestResults.Message, 'EMyError');
+    CheckContains('may not raise: text',
+      aCase.TestResults.Message, 'expected');
+    CheckCount('may not raise: asserts',
+      aCase.TestResults.NAsserts, 2);
+
+    aCase := FindCase(FailTarget, 'CaseMayRaiseInnerFailure');
+    CheckResultType('may raise inner: type',
+      aCase.TestResults.ResultType, rtFailed);
+    CheckText('may raise inner: assert',
+      aCase.TestResults.FailedAssert, 'InnerMayFail');
+    CheckContains('may raise inner: message',
+      aCase.TestResults.Message, 'inner-may-fail');
+    MustTrue(Pos('Soft failures', aCase.TestResults.Message) = 0,
+      'may raise inner: hard failure', aCase.TestResults.Message);
+    CheckCount('may raise inner: asserts',
+      aCase.TestResults.NAsserts, 2);
+
+    aCase := FindCase(FailTarget, 'CaseMayNotRaiseInnerFailure');
+    CheckResultType('may not raise inner: type',
+      aCase.TestResults.ResultType, rtFailed);
+    CheckText('may not raise inner: assert',
+      aCase.TestResults.FailedAssert, 'InnerMayFail');
+    CheckContains('may not raise inner: message',
+      aCase.TestResults.Message, 'inner-may-fail');
+    MustTrue(Pos('Soft failures', aCase.TestResults.Message) = 0,
+      'may not raise inner: hard failure', aCase.TestResults.Message);
+    CheckCount('may not raise inner: asserts',
+      aCase.TestResults.NAsserts, 2);
+  finally
+    FailTarget.Free;
+  end;
+
+  CheckCode('may fail: code', RunCode, 1);
+  CheckResultType('may fail: type', FailResults.ResultType, rtFailed);
+  CheckCount('may fail: cases', FailResults.NCases, 5);
+  CheckCount('may fail: success', FailResults.NSuccess, 0);
+  CheckCount('may fail: failed', FailResults.NFailed, 5);
+  CheckCount('may fail: error', FailResults.NError, 0);
+  CheckCount('may fail: asserts', FailResults.NAsserts, 10);
 end;
 
 {

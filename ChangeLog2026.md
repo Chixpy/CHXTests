@@ -1,5 +1,37 @@
 # ChangeLog 2026
 
+## 2026-11-16 16:42
+
+Add soft assertions and unify the assertion include.
+
+### `ucCHXTestGroup.pas`
+- Add `MayTrue`, `MayFalse` and the internal `MayFail` helper.
+- Add soft `MayRaise`/`MayNotRaise` with `TProcedure` and `tTestMethod`
+  overloads, preserving inner `eCHXTestFailed` re-raising.
+- Store soft failures per case, clear them at case start and combine them with
+  hard failures or unexpected errors.
+- Report cases with only soft failures as `rtFailed` with a `Soft failures (N)`
+  message.
+- Add resource strings for soft-failure messages.
+
+### `ucCHXTestGroup.inc`
+- Generate `May*` methods alongside `Must*` from the single public include.
+- Keep full parity for equality, `SameValue`, ordering and custom types.
+- Remove the separate `ucCHXTestGroupMay.inc`; custom types need only one
+  include per declaration/implementation.
+
+### `Examples/SoftTest.pas`
+- Add an example covering soft failures, a later hard failure and a later
+  successful `Must`, with self-checked expected results.
+
+### `Examples/SelfTest.pas`
+- Add pass/fail target groups for `MayRaise`/`MayNotRaise`.
+- Check soft messages, assertion counts and inner hard-failure re-raising.
+
+### `README.md`
+- Document soft assertions and exception assertions.
+- Remove the completed TODOs.
+
 ## 2026-11-16 15:26
 
 Add exception assertions and extend the self-tests.

@@ -26,6 +26,8 @@ resourcestring
   rsExpectedExceptionFmt = 'Expected exception %s but none was raised';
   rsWrongExceptionFmt = 'Expected exception %s but got %s: %s';
   rsUnexpectedRaiseFmt = 'Unexpected exception %s: %s';
+  rsSoftFailuresFmt = 'Soft failures (%d):';
+  rsSoftAssertions = 'Soft assertions';
 
 type
   tTestMethod = procedure of object;
@@ -69,6 +71,11 @@ type
     FTreeDepth : Cardinal;
 
     FailedAssert : String;
+    FSoftFailures : TStringList;
+    //< Soft failures recorded during the current case.
+
+    function SoftFailureMessage : String;
+    function CombinedMessage(const aMessage : String) : String;
 
     procedure SetTestName(const aTestName : String);
     procedure SetTreeDepth(const aTreeDepth : Cardinal);
@@ -136,6 +143,14 @@ type
         from an assertion method.)
     }
 
+    procedure MayFail(Sender : String; const Msg : String;
+      ErrAdrs: Pointer);
+    {<< Record a soft failure and continue the current test case method.
+
+      The case keeps running. When it finishes, the recorded failures make the
+      case fail unless a hard assertion has already aborted it.
+    }
+
   {
     Assertions / Checks / Tests...
 
@@ -151,6 +166,14 @@ type
     procedure MustTrue(const Condition : Boolean;
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
     procedure MustFalse(const Condition : Boolean;
+      Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+
+  {
+    Soft assertions: record the failure without aborting the case.
+  }
+    procedure MayTrue(const Condition : Boolean;
+      Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+    procedure MayFalse(const Condition : Boolean;
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
 
   {
@@ -198,6 +221,34 @@ type
         address.)
     }
     procedure MustNotRaise(const Proc : tTestMethod;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Overload for a method reference; see the previous declaration. }
+
+    procedure MayRaise(const Proc : TProcedure;
+      const Expected : ExceptClass = nil;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Soft version of `MustRaise`: record a failure and continue.
+
+      A missing exception or a different exception is recorded as a soft
+      failure. An `eCHXTestFailed` raised by a `Must*` inside `Proc` is
+      re-raised unless it is the expected class.
+    }
+    procedure MayRaise(const Proc : tTestMethod;
+      const Expected : ExceptClass = nil;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Overload for a method reference; see the previous declaration. }
+
+    procedure MayNotRaise(const Proc : TProcedure;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Soft version of `MustNotRaise`: record a failure and continue.
+
+      An `eCHXTestFailed` raised by a `Must*` inside `Proc` is re-raised.
+    }
+    procedure MayNotRaise(const Proc : tTestMethod;
       Sender : String = ''; Msg : String = '';
       ErrAdrs: Pointer = nil); overload;
     {< Overload for a method reference; see the previous declaration. }
@@ -689,6 +740,36 @@ begin
   raise eCHXTestFailed.Create(Msg) at ErrAdrs;
 end;
 
+function cCHXTestGroup.SoftFailureMessage : String;
+begin
+  Result := '';
+  if FSoftFailures.Count = 0 then Exit;
+
+  Result := Format(rsSoftFailuresFmt, [FSoftFailures.Count]) + LineEnding +
+    Trim(FSoftFailures.Text);
+end;
+
+function cCHXTestGroup.CombinedMessage(const aMessage : String) : String;
+begin
+  Result := aMessage;
+  if FSoftFailures.Count = 0 then Exit;
+
+  if Result <> '' then Result := Result + LineEnding;
+  Result := Result + SoftFailureMessage;
+end;
+
+procedure cCHXTestGroup.MayFail(Sender : String; const Msg : String;
+  ErrAdrs: Pointer);
+begin
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  FailedAssert := Sender;
+
+  if not Assigned(ErrAdrs) then
+    ErrAdrs := CallerAddr;
+
+  FSoftFailures.Add(Format('%s: %s', [Sender, Msg]));
+end;
+
 procedure cCHXTestGroup.MustTrue(const Condition : Boolean;
   Sender, Msg : String; ErrAdrs: Pointer);
 begin
@@ -713,6 +794,32 @@ begin
   if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
 
   MustFail(Sender, Msg, ErrAdrs);
+end;
+
+procedure cCHXTestGroup.MayTrue(const Condition : Boolean;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if Condition then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsNotTrue;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Msg, ErrAdrs);
+end;
+
+procedure cCHXTestGroup.MayFalse(const Condition : Boolean;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+  if not Condition then Exit; // OK
+
+  if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+  if Msg = '' then Msg := rsNotFalse;
+  if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+
+  MayFail(Sender, Msg, ErrAdrs);
 end;
 
 procedure cCHXTestGroup.MustRaise(const Proc : TProcedure;
@@ -855,6 +962,152 @@ begin
   end;
 end;
 
+procedure cCHXTestGroup.MayRaise(const Proc : TProcedure;
+  const Expected : ExceptClass; Sender, Msg : String; ErrAdrs: Pointer);
+var
+  ExpectedRaised : Boolean;
+  FailureReported : Boolean;
+  aExpected : ExceptClass;
+begin
+  Inc(NCaseAsserts);
+  ExpectedRaised := False;
+  FailureReported := False;
+
+  if Assigned(Expected) then
+    aExpected := Expected
+  else
+    aExpected := Exception;
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+    begin
+      if aExpected <> eCHXTestFailed then
+        raise;
+      ExpectedRaised := True;
+    end;
+    on E: Exception do
+    begin
+      if E is aExpected then
+        ExpectedRaised := True
+      else
+      begin
+        if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+        if Msg = '' then
+          Msg := Format(rsWrongExceptionFmt,
+            [aExpected.ClassName, E.ClassName, E.Message]);
+        if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+        MayFail(Sender, Msg, ErrAdrs);
+        FailureReported := True;
+      end;
+    end;
+  end;
+
+  if not ExpectedRaised and not FailureReported then
+  begin
+    if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+    if Msg = '' then
+      Msg := Format(rsExpectedExceptionFmt, [aExpected.ClassName]);
+    if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+    MayFail(Sender, Msg, ErrAdrs);
+  end;
+end;
+
+procedure cCHXTestGroup.MayRaise(const Proc : tTestMethod;
+  const Expected : ExceptClass; Sender, Msg : String; ErrAdrs: Pointer);
+var
+  ExpectedRaised : Boolean;
+  FailureReported : Boolean;
+  aExpected : ExceptClass;
+begin
+  Inc(NCaseAsserts);
+  ExpectedRaised := False;
+  FailureReported := False;
+
+  if Assigned(Expected) then
+    aExpected := Expected
+  else
+    aExpected := Exception;
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+    begin
+      if aExpected <> eCHXTestFailed then
+        raise;
+      ExpectedRaised := True;
+    end;
+    on E: Exception do
+    begin
+      if E is aExpected then
+        ExpectedRaised := True
+      else
+      begin
+        if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+        if Msg = '' then
+          Msg := Format(rsWrongExceptionFmt,
+            [aExpected.ClassName, E.ClassName, E.Message]);
+        if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+        MayFail(Sender, Msg, ErrAdrs);
+        FailureReported := True;
+      end;
+    end;
+  end;
+
+  if not ExpectedRaised and not FailureReported then
+  begin
+    if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+    if Msg = '' then
+      Msg := Format(rsExpectedExceptionFmt, [aExpected.ClassName]);
+    if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+    MayFail(Sender, Msg, ErrAdrs);
+  end;
+end;
+
+procedure cCHXTestGroup.MayNotRaise(const Proc : TProcedure;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+      raise;
+    on E: Exception do
+    begin
+      if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+      if Msg = '' then
+        Msg := Format(rsUnexpectedRaiseFmt, [E.ClassName, E.Message]);
+      if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+      MayFail(Sender, Msg, ErrAdrs);
+    end;
+  end;
+end;
+
+procedure cCHXTestGroup.MayNotRaise(const Proc : tTestMethod;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+      raise;
+    on E: Exception do
+    begin
+      if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+      if Msg = '' then
+        Msg := Format(rsUnexpectedRaiseFmt, [E.ClassName, E.Message]);
+      if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+      MayFail(Sender, Msg, ErrAdrs);
+    end;
+  end;
+end;
+
 {$MACRO ON}
 
 {$PUSH}
@@ -930,6 +1183,7 @@ begin
   TestWriters := cCHXTestWriterList.Create(False);
   OwnedWriters := cCHXTestWriterList.Create(True);
   TestCases := cTestCaseList.Create;
+  FSoftFailures := TStringList.Create;
 
   TestResultInit;
 
@@ -955,6 +1209,7 @@ end;
 
 destructor cCHXTestGroup.Destroy;
 begin
+  FSoftFailures.Free;
   TestCases.Free;
   TestWriters.Free;
   OwnedWriters.Free;
@@ -1172,6 +1427,8 @@ end;
 function cCHXTestGroup.RunCase(TestCase : pTestCase) : Integer;
 begin
   NCaseAsserts := 0;
+  FailedAssert := '';
+  FSoftFailures.Clear;
 
   TestCase^.TestResults.Init(TestCase^.CaseName);
   TestCase^.TestResults.TreeDepth := TestResults.TreeDepth;
@@ -1191,13 +1448,19 @@ begin
 
     try
       TestCase^.Method(); // Ejecución directa del puntero almacenado
-      AddCaseSuccess(TestCase);
+      if FSoftFailures.Count > 0 then
+      begin
+        FailedAssert := rsSoftAssertions;
+        AddCaseFail(TestCase, SoftFailureMessage);
+      end
+      else
+        AddCaseSuccess(TestCase);
     except
       on E: eCHXTestFailed do
       begin
         if (ExceptAddr <> nil) then
           TestCase^.TestResults.BackTrace := Trim(BackTraceStrFunc(ExceptAddr));
-        AddCaseFail(TestCase, E.Message);
+        AddCaseFail(TestCase, CombinedMessage(E.Message));
       end;
       on E: Exception do
       begin
@@ -1205,7 +1468,7 @@ begin
         // Not useful here... it doesn't show the line inside the method...
         if (ExceptAddr <> nil) then
           TestCase^.TestResults.BackTrace := Trim(BackTraceStrFunc(ExceptAddr));
-        AddCaseError(TestCase, E.Message);
+        AddCaseError(TestCase, CombinedMessage(E.Message));
       end;
     end;
   finally
