@@ -40,6 +40,8 @@ type
     FailedAssert : String;
     Message : String;
     BackTrace : String;
+    Info : String;
+    //< Persistent information sent by the case, joined with `LineEnding`.
 
     procedure Init(const aName : String = '');
     procedure AddResult(const aResult : tCHXTestResults);
@@ -91,6 +93,7 @@ begin
     FailedAssert := '';
     Message := '';
     BackTrace := '';
+    Info := '';
 end;
 
 initialization

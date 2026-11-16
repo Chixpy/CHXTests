@@ -21,6 +21,10 @@ expected results match, and with `1` otherwise.
 `SoftTest.pas` shows soft assertions: it exits with `0` when its intentional
 soft failures and their combined messages are produced.
 
+`ProgressTest.pas` enables `ShowInfo` and `ShowProgress` to demonstrate
+persistent case information and a transient progress loop. Its optional first
+argument sets the number of iterations; the default is 10.
+
 ## Simple use program
 
 1. Create a `cCHXTestGroup` descendant, with tests procedures in published
@@ -107,7 +111,9 @@ when nothing was executed (skipped). Assign it to `ExitCode` for batch use.
   both messages are reported.
 - Exception assertions: `MustRaise`, `MustNotRaise`, `MayRaise` and
   `MayNotRaise`, including method-reference overloads.
-- TODO: Send status info to listeners. (For example: Progress or debug info.).
+- Cases can send persistent information with `SendInfo` and transient progress
+  with `SendProgress`. Console rendering is opt-in through `ShowInfo` and
+  `ShowProgress`.
 - TODO: More assertions for inheritance, class types testing and nil.
   More especifically:
   - String: Empty, _Nil_ (specially `PChar`). Regex matching.

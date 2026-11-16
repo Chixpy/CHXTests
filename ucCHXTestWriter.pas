@@ -24,6 +24,21 @@ type
     procedure OnTestEnd(const TestResult : tCHXTestResults); virtual;
     procedure OnCaseStart(const TestResult : tCHXTestResults); virtual;
     procedure OnCaseEnd(const TestResult : tCHXTestResults); virtual;
+    procedure OnCaseInfo(const TestResult : tCHXTestResults;
+      const Text : String); virtual;
+    {< Called when a case sends persistent information.
+
+      `TestResult.Info` already contains the new text appended. Writers that
+      only need the final information can ignore this callback and use
+      `OnCaseEnd`.
+    }
+    procedure OnCaseProgress(const TestResult : tCHXTestResults;
+      const Text : String; const Percent : Integer); virtual;
+    {< Called when a case sends transient progress.
+
+      `Percent` is a value from 0 to 100, or -1 when it is not available.
+      Progress is not stored in `TestResult`.
+    }
     procedure OnAfterEnd(const TestResult : tCHXTestResults); virtual;
   end;
 
@@ -66,6 +81,18 @@ begin
 end;
 
 procedure cCHXTestWriter.OnCaseEnd(const TestResult : TCHXTestResults);
+begin
+  // Do nothing by default
+end;
+
+procedure cCHXTestWriter.OnCaseInfo(const TestResult : TCHXTestResults;
+  const Text : String);
+begin
+  // Do nothing by default
+end;
+
+procedure cCHXTestWriter.OnCaseProgress(const TestResult : TCHXTestResults;
+  const Text : String; const Percent : Integer);
 begin
   // Do nothing by default
 end;

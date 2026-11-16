@@ -64,15 +64,26 @@ type
 
   cCHXTWConsole = class(cCHXTestWriter)
   protected
+    FProgressShown : Boolean;
+    FProgressLen : Integer;
+    FCaseStartLine : String;
+
     function ResultStr(const ResultType : tCHXTestResultType) : String;
+    function FormatStr(const aString : String;
+      const TestResults : tCHXTestResults) : String;
     procedure WriteStr(const aString : String;
       const TestResults : tCHXTestResults);
+    procedure WriteInfo(const TestResults : tCHXTestResults);
 
   public
     TextWidth : Integer;
     //< Width for wrap messages
     ShowTime : Boolean;
     //< Show actual time where a test started.
+    ShowInfo : Boolean;
+    //< Render the persistent information sent by cases.
+    ShowProgress : Boolean;
+    //< Render transient progress using carriage returns.
 
     IndentStr : String;
     BeforeStartFmt : String;
@@ -97,6 +108,8 @@ type
     procedure OnTestStart(const TestResults : tCHXTestResults); override;
     procedure OnCaseStart(const TestResults : tCHXTestResults); override;
     procedure OnCaseEnd(const TestResults : tCHXTestResults); override;
+    procedure OnCaseProgress(const TestResults : tCHXTestResults;
+      const Text : String; const Percent : Integer); override;
     procedure OnTestEnd(const TestResults : tCHXTestResults); override;
     procedure OnAfterEnd(const TestResults : tCHXTestResults); override;
   end;
@@ -121,10 +134,10 @@ begin
   end;
 end;
 
-procedure cCHXTWConsole.WriteStr(const aString : String;
-  const TestResults : tCHXTestResults);
+function cCHXTWConsole.FormatStr(const aString : String;
+  const TestResults : tCHXTestResults) : String;
 var
-  LineIndent, TimeStr, aStr : String;
+  LineIndent, TimeStr : String;
 begin
   if ShowTime then
     TimeStr := TimeToStr(Time)
@@ -133,7 +146,7 @@ begin
 
   LineIndent := DupeString(IndentStr, TestResults.TreeDepth);
 
-  aStr := Format(aString,
+  Result := Format(aString,
     [
       LineEnding + LineIndent,          // `%0:s` = Newline + Current indent
       IndentStr,                        // `%1:s` = Additional indent
@@ -154,23 +167,28 @@ begin
       TestResults.BackTrace,             // `%16:s` = Fail / Error BackTrace
       TimeStr                           // `%17:s` = Current time
     ]);
+end;
 
-  // ToDo: Use WordWrap
+procedure cCHXTWConsole.WriteStr(const aString : String;
+  const TestResults : tCHXTestResults);
+var
+  aStr : String;
+begin
+  aStr := FormatStr(aString, TestResults);
   if aStr <> '' then
     Write(aStr);
+end;
 
-//   LineIndent := DupeString(IndentStr, TestResults.TreeDepth + 2) + '  ';
-//
-//   if Self.TextWidth >= LineIndent.Length + 1 then
-//     WriteLn(DupeString(IndentStr, TestResults.TreeDepth + 2) + '  ' +
-//       TestResults.Message)
-//   else
-//   begin
-//     LineIndent := DupeString(IndentStr, TestResults.TreeDepth + 2) + '  ';
-//     Write(LineIndent);
-//     WriteLn(WrapText(TestResults.Message, LineEnding + LineIndent,
-//       [' ', ',', ';', '.', #9], 80 - LineIndent.Length));
-//   end;
+procedure cCHXTWConsole.WriteInfo(const TestResults : tCHXTestResults);
+var
+  LineIndent, aInfo : String;
+begin
+  if TestResults.Info = '' then Exit;
+
+  LineIndent := DupeString(IndentStr, TestResults.TreeDepth + 2);
+  aInfo := StringReplace(TestResults.Info, LineEnding,
+    LineEnding + LineIndent, [rfReplaceAll]);
+  Write(LineEnding + LineIndent + aInfo);
 end;
 
 constructor cCHXTWConsole.Create;
@@ -193,7 +211,12 @@ begin
   ErrorStr := ksDefError;
 
   TextWidth := 80;
-  ShowTime := true;
+  ShowTime := True;
+  ShowInfo := False;
+  ShowProgress := False;
+  FProgressShown := False;
+  FProgressLen := 0;
+  FCaseStartLine := '';
 end;
 
 destructor cCHXTWConsole.Destroy;
@@ -217,18 +240,59 @@ begin
 end;
 
 procedure cCHXTWConsole.OnCaseStart(const TestResults : tCHXTestResults);
+var
+  aLine : String;
 begin
-  WriteStr(CaseStartFmt, TestResults);
+  aLine := FormatStr(CaseStartFmt, TestResults);
+  FCaseStartLine := aLine;
+  if Copy(FCaseStartLine, 1, Length(LineEnding)) = LineEnding then
+    Delete(FCaseStartLine, 1, Length(LineEnding));
+
+  FProgressShown := False;
+  FProgressLen := 0;
+
+  if aLine <> '' then
+    Write(aLine);
 end;
 
 procedure cCHXTWConsole.OnCaseEnd(const TestResults : tCHXTestResults);
 begin
+  if FProgressShown then
+  begin
+    Write(#13, DupeString(' ', FProgressLen), #13);
+    if FCaseStartLine <> '' then
+      Write(FCaseStartLine);
+    FProgressShown := False;
+    FProgressLen := 0;
+  end;
+
   WriteStr(CaseEndFmt, TestResults);
   if not (TestResults.ResultType in [rtSkip, rtSuccess]) then
   begin
     WriteStr(CaseFailMsgFmt, TestResults);
     WriteStr(CaseBackTraceMsgFmt, TestResults);
   end;
+
+  if ShowInfo then
+    WriteInfo(TestResults);
+end;
+
+procedure cCHXTWConsole.OnCaseProgress(const TestResults : tCHXTestResults;
+  const Text : String; const Percent : Integer);
+var
+  aLine, LineIndent : String;
+begin
+  if not ShowProgress then Exit;
+
+  LineIndent := DupeString(IndentStr, TestResults.TreeDepth + 2);
+  if Percent >= 0 then
+    aLine := Format('%s%s (%d%%)', [LineIndent, Text, Percent])
+  else
+    aLine := LineIndent + Text;
+
+  Write(#13, DupeString(' ', FProgressLen), #13, aLine);
+  FProgressLen := Length(aLine);
+  FProgressShown := True;
 end;
 
 procedure cCHXTWConsole.OnTestEnd(const TestResults : tCHXTestResults);

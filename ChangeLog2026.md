@@ -1,5 +1,44 @@
 # ChangeLog 2026
 
+## 2026-11-16 17:49
+
+Add case info and progress reporting.
+
+### `utCHXTestResults.pas`
+- Add `Info` for persistent case information and reset it in `Init`.
+
+### `ucCHXTestWriter.pas`
+- Add virtual `OnCaseInfo` and `OnCaseProgress` callbacks, both no-op by
+  default.
+
+### `ucCHXTestGroup.pas`
+- Add `SendInfo`, which appends text to the current case result and notifies
+  writers.
+- Add `SendProgress` for transient progress with an optional percentage.
+- Track the current case so callbacks receive its result; calls outside a case
+  fall back to the group result.
+
+### `ucCHXTWConsole.pas`
+- Add opt-in `ShowInfo` and `ShowProgress` switches, disabled by default.
+- Print persistent info at case end with indentation.
+- Render progress with `\r`, clear previous updates and restore the case line
+  before printing the result.
+- Split format application from writing so the case line can be restored.
+
+### `Examples/ProgressTest.pas`
+- Add an example with a configurable progress loop and persistent info.
+- Accept an optional iteration count (default 10) and self-check the results
+  and stored info.
+
+### `README.md`
+- Document info/progress and the new example.
+
+### Verification
+- Rebuild and run all ten examples; each exits with `0` and reports
+  `0 unfreed memory blocks`.
+- Check `ProgressTest` with default, custom, invalid and non-positive
+  iteration counts.
+
 ## 2026-11-16 16:42
 
 Add soft assertions and unify the assertion include.

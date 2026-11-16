@@ -73,6 +73,8 @@ type
     FailedAssert : String;
     FSoftFailures : TStringList;
     //< Soft failures recorded during the current case.
+    FCurrentCase : pTestCase;
+    //< Case executing now, if any.
 
     function SoftFailureMessage : String;
     function CombinedMessage(const aMessage : String) : String;
@@ -95,6 +97,10 @@ type
     procedure NotifyTestEnd;
     procedure NotifyCaseStart(const aCaseResult : tCHXTestResults);
     procedure NotifyCaseEnd(const aCaseResult : tCHXTestResults);
+    procedure NotifyCaseInfo(const aCaseResult : tCHXTestResults;
+      const Text : String);
+    procedure NotifyCaseProgress(const aCaseResult : tCHXTestResults;
+      const Text : String; const Percent : Integer);
 
   protected
     OwnedChilds : cCHXTestGroupList;
@@ -394,6 +400,20 @@ type
     function GetCasePos(const aCaseName: String): Integer;
     procedure SetCaseEnabled(const aCaseName: string; const aEnabled: Boolean);
 
+    procedure SendInfo(const Text : String);
+    {< Send persistent information from the current case.
+
+      The text is appended to `TestResults.Info`, joined with `LineEnding`.
+      If called outside a case, it is appended to the group result instead.
+      Writers receive the `OnCaseInfo` callback.
+    }
+    procedure SendProgress(const Text : String; const Percent : Integer = -1);
+    {< Send transient progress from the current case.
+
+      Progress is not stored in `TestResults`; writers receive it through
+      `OnCaseProgress`. `Percent` is in the 0..100 range, or -1 when unknown.
+    }
+
     function RunCase(const CaseName : String) : Integer;
     function RunCase(TestCase : pTestCase) : Integer;
     function RunAllCases : Integer; virtual;
@@ -647,6 +667,52 @@ var
 begin
   for aWriter in TestWriters do
     aWriter.OnCaseEnd(aCaseResult);
+end;
+
+procedure cCHXTestGroup.NotifyCaseInfo(const aCaseResult : tCHXTestResults;
+  const Text : String);
+var
+  aWriter: cCHXTestWriter;
+begin
+  for aWriter in TestWriters do
+    aWriter.OnCaseInfo(aCaseResult, Text);
+end;
+
+procedure cCHXTestGroup.NotifyCaseProgress(const aCaseResult : tCHXTestResults;
+  const Text : String; const Percent : Integer);
+var
+  aWriter: cCHXTestWriter;
+begin
+  for aWriter in TestWriters do
+    aWriter.OnCaseProgress(aCaseResult, Text, Percent);
+end;
+
+procedure cCHXTestGroup.SendInfo(const Text : String);
+begin
+  if Assigned(FCurrentCase) then
+  begin
+    if FCurrentCase^.TestResults.Info <> '' then
+      FCurrentCase^.TestResults.Info :=
+        FCurrentCase^.TestResults.Info + LineEnding;
+    FCurrentCase^.TestResults.Info := FCurrentCase^.TestResults.Info + Text;
+    NotifyCaseInfo(FCurrentCase^.TestResults, Text);
+  end
+  else
+  begin
+    if TestResults.Info <> '' then
+      TestResults.Info := TestResults.Info + LineEnding;
+    TestResults.Info := TestResults.Info + Text;
+    NotifyCaseInfo(TestResults, Text);
+  end;
+end;
+
+procedure cCHXTestGroup.SendProgress(const Text : String;
+  const Percent : Integer);
+begin
+  if Assigned(FCurrentCase) then
+    NotifyCaseProgress(FCurrentCase^.TestResults, Text, Percent)
+  else
+    NotifyCaseProgress(TestResults, Text, Percent);
 end;
 
 procedure cCHXTestGroup.TestResultInit;
@@ -1184,6 +1250,7 @@ begin
   OwnedWriters := cCHXTestWriterList.Create(True);
   TestCases := cTestCaseList.Create;
   FSoftFailures := TStringList.Create;
+  FCurrentCase := nil;
 
   TestResultInit;
 
@@ -1425,7 +1492,12 @@ begin
 end;
 
 function cCHXTestGroup.RunCase(TestCase : pTestCase) : Integer;
+var
+  PreviousCase : pTestCase;
 begin
+  PreviousCase := FCurrentCase;
+  FCurrentCase := TestCase;
+
   NCaseAsserts := 0;
   FailedAssert := '';
   FSoftFailures.Clear;
@@ -1479,6 +1551,7 @@ begin
 
     DoCaseEnd(TestCase^.TestResults);
     NotifyCaseEnd(TestCase^.TestResults);
+    FCurrentCase := PreviousCase;
   end;
 
   Result := TestResultExitCode(TestCase^.TestResults.ResultType);
