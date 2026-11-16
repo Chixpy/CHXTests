@@ -1,5 +1,36 @@
 # ChangeLog 2026
 
+## 2026-11-16 15:26
+
+Add exception assertions and extend the self-tests.
+
+### Test runner (`ucCHXTestGroup.pas`)
+- Add `MustRaise` and `MustNotRaise` overloads for `TProcedure` and
+  `tTestMethod` (`procedure of object`).
+- Accept the expected exception class and its subclasses. `nil` means
+  `Exception`, because FPC does not accept a class reference as a default
+  parameter value.
+- Preserve the original exception address for the backtrace and include the
+  expected class, actual class and exception message in failure messages.
+- Re-raise an internal `eCHXTestFailed` unless it is the expected class, so an
+  assertion failure inside the procedure is not hidden.
+- Add resource strings for the new failure messages.
+
+### Examples
+- Add `ExceptionTest.pas` with three outcomes: the expected exception, no
+  exception and a different exception. It returns `0` when the intentional
+  result (one success and two failures) is produced.
+- Extend `SelfTest.pas` with `MustRaise`/`MustNotRaise` coverage, including
+  method references, subclasses, failure messages and inner assertion
+  re-raising.
+
+### Verification
+- Rebuild and run all eight examples; all exit with `0` and report
+  `0 unfreed memory blocks`.
+- `SelfTest` now runs 11 successful cases with 118 assertions.
+- `ExceptionTest` reports the expected 1 success and 2 failures.
+- `BasicTest` still reports 1 success, 1 failure and 1 error.
+
 ## 2026-11-16 00:49
 
 Make skip handling and result propagation reliable.

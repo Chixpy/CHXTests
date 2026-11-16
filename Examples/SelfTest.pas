@@ -8,6 +8,11 @@ uses
 
 type
 
+  EMyBase = class(Exception);
+  EMyError = class(EMyBase);
+  EMyDerived = class(EMyError);
+  EMyOther = class(Exception);
+
   {$PUSH}
   {$M+}
   cTargetPass = class(cCHXTestGroup)
@@ -36,6 +41,9 @@ type
       aExpected : Cardinal);
     procedure CheckResultType(const aLabel : String;
       const aActual, aExpected : tCHXTestResultType);
+    procedure RaiseExpectedMethod;
+    procedure NoRaiseMethod;
+    procedure InnerMustFail;
   published
     procedure CheckSuccess;
     procedure CheckFailure;
@@ -46,6 +54,8 @@ type
     procedure CheckChildSkips;
     procedure CheckDisabledSubtree;
     procedure CheckRunCase;
+    procedure CheckMustRaise;
+    procedure CheckMustNotRaise;
   end;
   {$POP}
 
@@ -69,8 +79,45 @@ begin
 end;
 
 {
+  Exception procedures
+}
+
+procedure RaiseExpectedGlobal;
+begin
+  raise EMyError.Create('expected');
+end;
+
+procedure RaiseOtherGlobal;
+begin
+  raise EMyOther.Create('other');
+end;
+
+procedure RaiseDerivedGlobal;
+begin
+  raise EMyDerived.Create('derived');
+end;
+
+procedure NoRaiseGlobal;
+begin
+end;
+
+{
   cSelfTest
 }
+
+procedure cSelfTest.RaiseExpectedMethod;
+begin
+  raise EMyError.Create('method expected');
+end;
+
+procedure cSelfTest.NoRaiseMethod;
+begin
+end;
+
+procedure cSelfTest.InnerMustFail;
+begin
+  MustTrue(False, 'InnerMustFail', 'inner-fail');
+end;
 
 procedure cSelfTest.CheckCode(const aLabel : String; const aActual,
   aExpected : Integer);
@@ -370,6 +417,95 @@ begin
   finally
     FailTarget.Free;
   end;
+end;
+
+procedure cSelfTest.CheckMustRaise;
+var
+  Failed : Boolean;
+begin
+  MustRaise(@RaiseExpectedGlobal, EMyError);
+  MustRaise(@RaiseExpectedMethod, EMyError);
+  MustRaise(@RaiseOtherGlobal);
+  MustRaise(@RaiseDerivedGlobal, EMyBase);
+
+  Failed := False;
+  try
+    MustRaise(@NoRaiseGlobal, EMyError);
+  except
+    on E: eCHXTestFailed do
+    begin
+      Failed := True;
+      MustTrue(Pos('none was raised', E.Message) > 0,
+        'MustRaise: no-exception message', E.Message);
+    end;
+  end;
+  MustTrue(Failed, 'MustRaise: no exception should fail');
+
+  Failed := False;
+  try
+    MustRaise(@RaiseOtherGlobal, EMyError);
+  except
+    on E: eCHXTestFailed do
+    begin
+      Failed := True;
+      MustTrue(Pos('EMyError', E.Message) > 0,
+        'MustRaise: expected class in message', E.Message);
+      MustTrue(Pos('EMyOther', E.Message) > 0,
+        'MustRaise: actual class in message', E.Message);
+      MustTrue(Pos('other', E.Message) > 0,
+        'MustRaise: actual text in message', E.Message);
+    end;
+  end;
+  MustTrue(Failed, 'MustRaise: wrong class should fail');
+
+  Failed := False;
+  try
+    MustRaise(@InnerMustFail, Exception);
+  except
+    on E: eCHXTestFailed do
+    begin
+      Failed := True;
+      MustTrue(Pos('inner-fail', E.Message) > 0,
+        'MustRaise: inner failure', E.Message);
+    end;
+  end;
+  MustTrue(Failed, 'MustRaise: inner failure should re-raise');
+end;
+
+procedure cSelfTest.CheckMustNotRaise;
+var
+  Failed : Boolean;
+begin
+  MustNotRaise(@NoRaiseGlobal);
+  MustNotRaise(@NoRaiseMethod);
+
+  Failed := False;
+  try
+    MustNotRaise(@RaiseExpectedGlobal);
+  except
+    on E: eCHXTestFailed do
+    begin
+      Failed := True;
+      MustTrue(Pos('EMyError', E.Message) > 0,
+        'MustNotRaise: class in message', E.Message);
+      MustTrue(Pos('expected', E.Message) > 0,
+        'MustNotRaise: exception text', E.Message);
+    end;
+  end;
+  MustTrue(Failed, 'MustNotRaise: exception should fail');
+
+  Failed := False;
+  try
+    MustNotRaise(@InnerMustFail);
+  except
+    on E: eCHXTestFailed do
+    begin
+      Failed := True;
+      MustTrue(Pos('inner-fail', E.Message) > 0,
+        'MustNotRaise: inner failure', E.Message);
+    end;
+  end;
+  MustTrue(Failed, 'MustNotRaise: inner failure should re-raise');
 end;
 
 {

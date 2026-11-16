@@ -23,6 +23,9 @@ resourcestring
   rsLessFmt = '"%s" < "%s"';
   rsGrtEquFmt = '"%s" => "%s"';
   rsLssEquFmt = '"%s" =< "%s"';
+  rsExpectedExceptionFmt = 'Expected exception %s but none was raised';
+  rsWrongExceptionFmt = 'Expected exception %s but got %s: %s';
+  rsUnexpectedRaiseFmt = 'Unexpected exception %s: %s';
 
 type
   tTestMethod = procedure of object;
@@ -149,6 +152,55 @@ type
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
     procedure MustFalse(const Condition : Boolean;
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+
+  {
+    Exception assertions.
+  }
+    procedure MustRaise(const Proc : TProcedure;
+      const Expected : ExceptClass = nil;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Check that `Proc` raises `Expected` or a subclass of it.
+
+      An `eCHXTestFailed` raised by a `Must*` inside `Proc` is re-raised unless
+      it is the expected class, so an inner assertion failure is not hidden.
+
+      @param(Proc Procedure to execute.)
+      @param(Expected Exception class expected. Subclasses are accepted.
+        `nil` means `Exception`.)
+      @param(Sender Sender's name of the fail or failed statement.)
+
+      @param(Msg More detailed fail message. If empty, a message with the
+        expected and actual exception is generated.)
+      @param(ErrAdrs Address of the failed method. `nil` uses the exception
+        address or the caller address.)
+    }
+    procedure MustRaise(const Proc : tTestMethod;
+      const Expected : ExceptClass = nil;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Overload for a method reference; see the previous declaration. }
+
+    procedure MustNotRaise(const Proc : TProcedure;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Check that `Proc` does not raise an exception.
+
+      An `eCHXTestFailed` raised by a `Must*` inside `Proc` is re-raised, so
+      the inner assertion failure is reported.
+
+      @param(Proc Procedure to execute.)
+      @param(Sender Sender's name of the fail or failed statement.)
+
+      @param(Msg More detailed fail message. If empty, a message with the
+        exception class and message is generated.)
+      @param(ErrAdrs Address of the failed method. `nil` uses the exception
+        address.)
+    }
+    procedure MustNotRaise(const Proc : tTestMethod;
+      Sender : String = ''; Msg : String = '';
+      ErrAdrs: Pointer = nil); overload;
+    {< Overload for a method reference; see the previous declaration. }
 
   {
     Integers, floats, `Char`, `String`, pointers and instanced classes.
@@ -661,6 +713,146 @@ begin
   if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
 
   MustFail(Sender, Msg, ErrAdrs);
+end;
+
+procedure cCHXTestGroup.MustRaise(const Proc : TProcedure;
+  const Expected : ExceptClass; Sender, Msg : String; ErrAdrs: Pointer);
+var
+  ExpectedRaised : Boolean;
+  aExpected : ExceptClass;
+begin
+  Inc(NCaseAsserts);
+  ExpectedRaised := False;
+
+  if Assigned(Expected) then
+    aExpected := Expected
+  else
+    aExpected := Exception;
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+    begin
+      if aExpected <> eCHXTestFailed then
+        raise;
+      ExpectedRaised := True;
+    end;
+    on E: Exception do
+    begin
+      if E is aExpected then
+        ExpectedRaised := True
+      else
+      begin
+        if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+        if Msg = '' then
+          Msg := Format(rsWrongExceptionFmt,
+            [aExpected.ClassName, E.ClassName, E.Message]);
+        if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+        MustFail(Sender, Msg, ErrAdrs);
+      end;
+    end;
+  end;
+
+  if not ExpectedRaised then
+  begin
+    if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+    if Msg = '' then
+      Msg := Format(rsExpectedExceptionFmt, [aExpected.ClassName]);
+    if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+    MustFail(Sender, Msg, ErrAdrs);
+  end;
+end;
+
+procedure cCHXTestGroup.MustRaise(const Proc : tTestMethod;
+  const Expected : ExceptClass; Sender, Msg : String; ErrAdrs: Pointer);
+var
+  ExpectedRaised : Boolean;
+  aExpected : ExceptClass;
+begin
+  Inc(NCaseAsserts);
+  ExpectedRaised := False;
+
+  if Assigned(Expected) then
+    aExpected := Expected
+  else
+    aExpected := Exception;
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+    begin
+      if aExpected <> eCHXTestFailed then
+        raise;
+      ExpectedRaised := True;
+    end;
+    on E: Exception do
+    begin
+      if E is aExpected then
+        ExpectedRaised := True
+      else
+      begin
+        if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+        if Msg = '' then
+          Msg := Format(rsWrongExceptionFmt,
+            [aExpected.ClassName, E.ClassName, E.Message]);
+        if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+        MustFail(Sender, Msg, ErrAdrs);
+      end;
+    end;
+  end;
+
+  if not ExpectedRaised then
+  begin
+    if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+    if Msg = '' then
+      Msg := Format(rsExpectedExceptionFmt, [aExpected.ClassName]);
+    if not Assigned(ErrAdrs) then ErrAdrs := CallerAddr;
+    MustFail(Sender, Msg, ErrAdrs);
+  end;
+end;
+
+procedure cCHXTestGroup.MustNotRaise(const Proc : TProcedure;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+      raise;
+    on E: Exception do
+    begin
+      if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+      if Msg = '' then
+        Msg := Format(rsUnexpectedRaiseFmt, [E.ClassName, E.Message]);
+      if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+      MustFail(Sender, Msg, ErrAdrs);
+    end;
+  end;
+end;
+
+procedure cCHXTestGroup.MustNotRaise(const Proc : tTestMethod;
+  Sender, Msg : String; ErrAdrs: Pointer);
+begin
+  Inc(NCaseAsserts);
+
+  try
+    Proc;
+  except
+    on E: eCHXTestFailed do
+      raise;
+    on E: Exception do
+    begin
+      if Sender = '' then Sender := {$I %CURRENTROUTINE%};
+      if Msg = '' then
+        Msg := Format(rsUnexpectedRaiseFmt, [E.ClassName, E.Message]);
+      if not Assigned(ErrAdrs) then ErrAdrs := ExceptAddr;
+      MustFail(Sender, Msg, ErrAdrs);
+    end;
+  end;
 end;
 
 {$MACRO ON}
