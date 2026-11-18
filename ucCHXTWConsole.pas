@@ -51,10 +51,12 @@ const
 
   ksDefStart = 'Start';
   ksDefSkip = '⚠️ Skipped';
+  ksDefSkipGroup = '⛔ Skipped';
   ksDefSuccess = '✅ Success';
   ksDefFail = '❌ Failed';
-  ksDefError = '❌ ¡ERROR!';
-  {<< Default test / case result strings. }
+  ksDefError = '☢️ ¡ERROR!';
+  {<< Default test / case result strings. `ksDefSkipGroup` is used in the
+    final totals for skipped groups. }
 
 type
 
@@ -74,6 +76,7 @@ type
     procedure WriteStr(const aString : String;
       const TestResults : tCHXTestResults);
     procedure WriteInfo(const TestResults : tCHXTestResults);
+    procedure WriteSummaryItem(const Caption, Text : String);
 
   public
     TextWidth : Integer;
@@ -97,6 +100,8 @@ type
 
     StartStr : String;
     SkipStr : String;
+    SkipGroupStr : String;
+    //< String for skipped groups in the final totals.
     SuccessStr : String;
     FailStr : String;
     ErrorStr : String;
@@ -112,6 +117,7 @@ type
       const Text : String; const Percent : Integer); override;
     procedure OnTestEnd(const TestResults : tCHXTestResults); override;
     procedure OnAfterEnd(const TestResults : tCHXTestResults); override;
+    procedure WriteSummary; override;
   end;
 
 
@@ -191,6 +197,17 @@ begin
   Write(LineEnding + LineIndent + aInfo);
 end;
 
+procedure cCHXTWConsole.WriteSummaryItem(const Caption, Text : String);
+var
+  aText : String;
+begin
+  if Text = '' then Exit;
+
+  aText := StringReplace(Text, LineEnding,
+    LineEnding + IndentStr + IndentStr, [rfReplaceAll]);
+  WriteLn(IndentStr, IndentStr, Caption, ': ', aText);
+end;
+
 constructor cCHXTWConsole.Create;
 begin
   inherited Create;
@@ -206,6 +223,7 @@ begin
   CaseBackTraceMsgFmt := ksDefBckTrcMsgFmt;
   StartStr := ksDefStart;
   SkipStr := ksDefSkip;
+  SkipGroupStr := ksDefSkipGroup;
   SuccessStr := ksDefSuccess;
   FailStr := ksDefFail;
   ErrorStr := ksDefError;
@@ -315,11 +333,42 @@ begin
   WriteLn(IndentStr, Format('Time: %s / Asserts: %d / Cases: %d / Groups: %d',
     [TimeToStr(Time), TestResults.NAsserts, TestResults.NCases, TestResults.NSubTests]));
   WriteLn('Results:');
-  WriteLn(IndentStr, Format('%d %s / %d %s / %d %s / %d %s',
-    [TestResults.NSkip, ksDefSkip, TestResults.NSuccess, ksDefSuccess,
-    TestResults.NFailed, ksDefFail, TestResults.NError, ksDefError]));
-  WriteLn(IndentStr, Format('Groups skipped: %d',
-    [TestResults.NSkippedGroups]));
+  WriteLn(IndentStr, Format(
+    '%s: %d / %s (G): %d / %s (C): %d / %s: %d / %s: %d',
+    [SuccessStr, TestResults.NSuccess,
+    SkipGroupStr, TestResults.NSkippedGroups,
+    SkipStr, TestResults.NSkip,
+    FailStr, TestResults.NFailed,
+    ErrorStr, TestResults.NError]));
+  WriteLn;
+end;
+
+procedure cCHXTWConsole.WriteSummary;
+var
+  i : Integer;
+  aFailure : tCHXTestFailure;
+  aName : String;
+begin
+  if Failures.Count = 0 then Exit;
+
+  WriteLn('Failures and errors:');
+  for i := 0 to Failures.Count - 1 do
+  begin
+    aFailure := Failures[i];
+
+    if aFailure.TestPath <> '' then
+      aName := aFailure.TestPath + '.' + aFailure.CaseName
+    else
+      aName := aFailure.CaseName;
+
+    WriteLn(IndentStr, ResultStr(aFailure.ResultType), ' ', aName);
+
+    WriteSummaryItem('Assertion', aFailure.FailedAssert);
+    WriteSummaryItem('Message', aFailure.Message);
+    WriteSummaryItem('Info', aFailure.Info);
+    WriteSummaryItem('Backtrace', aFailure.BackTrace);
+  end;
+
   WriteLn;
 end;
 

@@ -4,7 +4,8 @@ program SelfTest;
 {$MODESWITCH FunctionReferences}
 
 uses
-  SysUtils, ucCHXTestGroup, ucCHXTWConsole, utCHXTestResults;
+  SysUtils, ucCHXTestGroup, ucCHXTestWriter, ucCHXTWConsole,
+  utCHXTestResults;
 
 type
 
@@ -28,6 +29,11 @@ type
   cTargetError = class(cCHXTestGroup)
   published
     procedure CaseError;
+  end;
+
+  cTargetInfoFail = class(cCHXTestGroup)
+  published
+    procedure CaseInfoFail;
   end;
 
   cTargetMayPass = class(cCHXTestGroup)
@@ -57,6 +63,14 @@ type
   cTargetEmpty = class(cCHXTestGroup)
   end;
 
+  cSummaryRecorder = class(cCHXTestWriter)
+  public
+    AfterCalls : Integer;
+    SummaryCalls : Integer;
+    procedure OnAfterEnd(const TestResult : tCHXTestResults); override;
+    procedure WriteSummary; override;
+  end;
+
   cSelfTest = class(cCHXTestGroup)
   private
     procedure CheckCode(const aLabel : String; const aActual,
@@ -81,6 +95,8 @@ type
     procedure CheckSkippedCase;
     procedure CheckChildSkips;
     procedure CheckDisabledSubtree;
+    procedure CheckFailureCollection;
+    procedure CheckSummary;
     procedure CheckRunCase;
     procedure CheckMustRaise;
     procedure CheckMustNotRaise;
@@ -105,6 +121,13 @@ end;
 procedure cTargetError.CaseError;
 begin
   raise Exception.Create('Intentional error.');
+end;
+
+procedure cTargetInfoFail.CaseInfoFail;
+begin
+  SendInfo('first info line');
+  SendInfo('second info line');
+  MustTrue(False, 'Info failure.');
 end;
 
 {
@@ -521,6 +544,93 @@ begin
     GrandResults.NSkip, 0);
   CheckCount('disabled subtree: grandchild groups',
     GrandResults.NSkippedGroups, 0);
+end;
+
+procedure cSelfTest.CheckFailureCollection;
+var
+  Root : cCHXTestGroup;
+  Writer : cCHXTestWriter;
+  aFailure : tCHXTestFailure;
+begin
+  Root := cCHXTestGroup.Create('Root');
+  try
+    Writer := Root.AddWriter(cCHXTestWriter);
+    Root.AddChildTest(cTargetFail, 'ChildFail');
+    Root.AddChildTest(cTargetError, 'ChildError');
+    Root.AddChildTest(cTargetInfoFail, 'ChildInfo');
+
+    CheckCode('collection: code', Root.RunAllCases, 2);
+    CheckCount('collection: failures', Writer.Failures.Count, 3);
+
+    aFailure := Writer.Failures[0];
+    CheckText('collection: path 0', aFailure.TestPath,
+      'Root.ChildFail');
+    CheckText('collection: case 0', aFailure.CaseName, 'CaseFail');
+    CheckResultType('collection: type 0', aFailure.ResultType,
+      rtFailed);
+    CheckText('collection: assert 0', aFailure.FailedAssert,
+      'Intentional failure.');
+    CheckText('collection: message 0', aFailure.Message, rsNotTrue);
+
+    aFailure := Writer.Failures[1];
+    CheckText('collection: path 1', aFailure.TestPath,
+      'Root.ChildError');
+    CheckText('collection: case 1', aFailure.CaseName, 'CaseError');
+    CheckResultType('collection: type 1', aFailure.ResultType,
+      rtError);
+    CheckContains('collection: message 1', aFailure.Message,
+      'Intentional error.');
+
+    aFailure := Writer.Failures[2];
+    CheckText('collection: path 2', aFailure.TestPath,
+      'Root.ChildInfo');
+    CheckText('collection: case 2', aFailure.CaseName, 'CaseInfoFail');
+    CheckResultType('collection: type 2', aFailure.ResultType,
+      rtFailed);
+    CheckText('collection: info 2', aFailure.Info,
+      'first info line' + LineEnding + 'second info line');
+  finally
+    Root.Free;
+  end;
+end;
+
+procedure cSummaryRecorder.OnAfterEnd(
+  const TestResult : tCHXTestResults);
+begin
+  Inc(AfterCalls);
+end;
+
+procedure cSummaryRecorder.WriteSummary;
+begin
+  Inc(SummaryCalls);
+end;
+
+procedure cSelfTest.CheckSummary;
+var
+  Root : cCHXTestGroup;
+  Recorder : cSummaryRecorder;
+begin
+  Root := cCHXTestGroup.Create('Root');
+  Recorder := cSummaryRecorder.Create;
+  try
+    Recorder.ShowSummary := True;
+    Root.AddWriter(Recorder);
+    Root.AddChildTest(cTargetFail, 'ChildFail');
+
+    CheckCode('summary: code', Root.RunAllCases, 1);
+    CheckCount('summary: after', Recorder.AfterCalls, 1);
+    CheckCount('summary: calls', Recorder.SummaryCalls, 1);
+    CheckCount('summary: failures', Recorder.Failures.Count, 1);
+
+    Recorder.ShowSummary := False;
+    CheckCode('summary: code 2', Root.RunAllCases, 1);
+    CheckCount('summary: after 2', Recorder.AfterCalls, 2);
+    CheckCount('summary: calls 2', Recorder.SummaryCalls, 1);
+    CheckCount('summary: failures 2', Recorder.Failures.Count, 1);
+  finally
+    Root.Free;
+    Recorder.Free;
+  end;
 end;
 
 procedure cSelfTest.CheckRunCase;

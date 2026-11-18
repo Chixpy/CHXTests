@@ -625,7 +625,7 @@ var
   aWriter: cCHXTestWriter;
 begin
   for aWriter in TestWriters do
-    aWriter.OnBeforeStart;
+    aWriter.ProcessBeforeStart;
 end;
 
 procedure cCHXTestGroup.NotifyAfterEnd;
@@ -634,7 +634,7 @@ var
 begin
   Inc(TestResults.NSubTests); // Adding main test.
   for aWriter in TestWriters do
-    aWriter.OnAfterEnd(TestResults);
+    aWriter.ProcessAfterEnd(TestResults);
 end;
 
 procedure cCHXTestGroup.NotifyTestStart;
@@ -642,7 +642,7 @@ var
   aWriter: cCHXTestWriter;
 begin
   for aWriter in TestWriters do
-    aWriter.OnTestStart(TestResults);
+    aWriter.ProcessTestStart(TestResults);
 end;
 
 procedure cCHXTestGroup.NotifyTestEnd;
@@ -650,7 +650,7 @@ var
   aWriter: cCHXTestWriter;
 begin
   for aWriter in TestWriters do
-    aWriter.OnTestEnd(TestResults);
+    aWriter.ProcessTestEnd(TestResults);
 end;
 
 procedure cCHXTestGroup.NotifyCaseStart(const aCaseResult : tCHXTestResults);
@@ -658,7 +658,7 @@ var
   aWriter: cCHXTestWriter;
 begin
   for aWriter in TestWriters do
-    aWriter.OnCaseStart(aCaseResult);
+    aWriter.ProcessCaseStart(aCaseResult);
 end;
 
 procedure cCHXTestGroup.NotifyCaseEnd(const aCaseResult : tCHXTestResults);
@@ -666,7 +666,7 @@ var
   aWriter: cCHXTestWriter;
 begin
   for aWriter in TestWriters do
-    aWriter.OnCaseEnd(aCaseResult);
+    aWriter.ProcessCaseEnd(aCaseResult);
 end;
 
 procedure cCHXTestGroup.NotifyCaseInfo(const aCaseResult : tCHXTestResults;

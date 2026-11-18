@@ -8,16 +8,58 @@ unit ucCHXTestWriter;
 interface
 
 uses
-  Generics.Collections, utCHXTestResults;
+  Classes, Generics.Collections, utCHXTestResults;
 
 type
+
+  tCHXTestFailure = record
+  {< Data needed to report a failed or errored case in the final summary. }
+    TestPath : String;
+    CaseName : String;
+    ResultType : tCHXTestResultType;
+    FailedAssert : String;
+    Message : String;
+    BackTrace : String;
+    Info : String;
+  end;
+
+  tCHXTestFailureList = specialize TList<tCHXTestFailure>;
 
 { cCHXTestWriter }
 
   cCHXTestWriter = class(tObject)
+  private
+    FFailures : tCHXTestFailureList;
+    FPathStack : TStringList;
+
+    function CurrentPath : String;
+    procedure AddFailure(const TestResult : tCHXTestResults);
+
   public
+    ShowSummary : Boolean;
+    //< Call `WriteSummary` after `OnAfterEnd` when a run finishes.
+
     constructor Create; virtual;
     destructor Destroy; override;
+
+    procedure ProcessBeforeStart;
+    procedure ProcessTestStart(const TestResult : tCHXTestResults);
+    procedure ProcessTestEnd(const TestResult : tCHXTestResults);
+    procedure ProcessCaseStart(const TestResult : tCHXTestResults);
+    procedure ProcessCaseEnd(const TestResult : tCHXTestResults);
+    procedure ProcessAfterEnd(const TestResult : tCHXTestResults);
+    {< Non-virtual event processors used by `cCHXTestGroup`.
+
+      They keep the path stack and collect failed/errored cases before calling
+      the corresponding virtual `On*` hook. Writers must override the hooks,
+      not these processors.
+    }
+
+    property Failures : tCHXTestFailureList read FFailures;
+    {< Failed and errored cases collected during the current run. }
+
+    procedure WriteSummary; virtual;
+    {< Render the collected failures. The default implementation does nothing. }
 
     procedure OnBeforeStart; virtual;
     procedure OnTestStart(const TestResult : tCHXTestResults); virtual;
@@ -53,11 +95,105 @@ implementation
 constructor cCHXTestWriter.Create;
 begin
   inherited Create;
+
+  FFailures := tCHXTestFailureList.Create;
+  FPathStack := TStringList.Create;
+
+  ShowSummary := True;
 end;
 
 destructor cCHXTestWriter.Destroy;
 begin
+  FPathStack.Free;
+  FFailures.Free;
+
   inherited Destroy;
+end;
+
+function cCHXTestWriter.CurrentPath : String;
+var
+  i : Integer;
+begin
+  Result := '';
+
+  for i := 0 to FPathStack.Count - 1 do
+  begin
+    if Result <> '' then
+      Result := Result + '.';
+    Result := Result + FPathStack[i];
+  end;
+end;
+
+procedure cCHXTestWriter.AddFailure(const TestResult : tCHXTestResults);
+var
+  aFailure : tCHXTestFailure;
+begin
+  aFailure.TestPath := CurrentPath;
+  aFailure.CaseName := TestResult.TestName;
+  aFailure.ResultType := TestResult.ResultType;
+  aFailure.FailedAssert := TestResult.FailedAssert;
+  aFailure.Message := TestResult.Message;
+  aFailure.BackTrace := TestResult.BackTrace;
+  aFailure.Info := TestResult.Info;
+
+  FFailures.Add(aFailure);
+end;
+
+procedure cCHXTestWriter.ProcessBeforeStart;
+begin
+  FPathStack.Clear;
+  FFailures.Clear;
+
+  OnBeforeStart;
+end;
+
+procedure cCHXTestWriter.ProcessTestStart(
+  const TestResult : tCHXTestResults);
+begin
+  // A writer attached only to a child may not receive ProcessBeforeStart.
+  if FPathStack.Count = 0 then
+    FFailures.Clear;
+
+  FPathStack.Add(TestResult.TestName);
+
+  OnTestStart(TestResult);
+end;
+
+procedure cCHXTestWriter.ProcessTestEnd(const TestResult : tCHXTestResults);
+begin
+  try
+    OnTestEnd(TestResult);
+  finally
+    if FPathStack.Count > 0 then
+      FPathStack.Delete(FPathStack.Count - 1);
+  end;
+end;
+
+procedure cCHXTestWriter.ProcessCaseStart(
+  const TestResult : tCHXTestResults);
+begin
+  OnCaseStart(TestResult);
+end;
+
+procedure cCHXTestWriter.ProcessCaseEnd(const TestResult : tCHXTestResults);
+begin
+  if TestResult.ResultType in [rtFailed, rtError] then
+    AddFailure(TestResult);
+
+  OnCaseEnd(TestResult);
+end;
+
+procedure cCHXTestWriter.ProcessAfterEnd(const TestResult : tCHXTestResults);
+begin
+  OnAfterEnd(TestResult);
+
+  if ShowSummary then
+    WriteSummary;
+end;
+
+procedure cCHXTestWriter.WriteSummary;
+begin
+  // Do nothing by default
 end;
 
 procedure cCHXTestWriter.OnBeforeStart;

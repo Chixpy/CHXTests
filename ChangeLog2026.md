@@ -1,5 +1,51 @@
 # ChangeLog 2026
 
+## 2026-11-18 01:18
+
+Add failure summaries and refresh the commit workflow.
+
+### `ucCHXTestWriter.pas`
+- Add `tCHXTestFailure` and `tCHXTestFailureList`.
+- Add non-virtual `Process*` event methods that maintain the group path stack
+  and collect failed/errored cases before calling the virtual hooks.
+- Expose the collected cases through `Failures`.
+- Add `ShowSummary` (enabled by default) and the virtual `WriteSummary`.
+- Include assertion, message, backtrace and case info in each failure.
+
+### `ucCHXTestGroup.pas`
+- Notify writers through the new `Process*` methods instead of the virtual
+  hooks directly.
+
+### `ucCHXTWConsole.pas`
+- Render the collected failures and errors after the totals.
+- Indent multiline summary values.
+- Add `SkipGroupStr` for groups skipped in the final line.
+- Merge skipped groups into the results line and remove the separate
+  `Groups skipped` line.
+- Use `⛔ Skipped` for groups, keep `⚠️ Skipped` for cases, and use
+  `☢️ ¡ERROR!` for errors.
+
+### `Examples/SelfTest.pas`
+- Check failure collection, path construction, summary dispatch and case info.
+- Add a summary recorder test for `ShowSummary`.
+
+### `Examples/BasicTest.pas`
+- Add a disabled case and update the expected results to include one skip.
+- Fix the progress percentage calculation in the intentional error case.
+
+### Workflow
+- Update `git_commit.sh` to generate its own `LastChanges.md` template,
+  require the file to be ignored and support `--add-ignore`.
+- Remove `LastChanges.example.md`.
+- Ignore `objcompleted.sh` and `Completed/`.
+
+### Verification
+- Rebuild and run all ten examples; each exits with `0` and reports
+  `0 unfreed memory blocks`.
+- `SelfTest` passes with 14 cases and 181 assertions.
+- Check the merged results line and the final failure summary in `BasicTest`,
+  `ExceptionTest` and `SoftTest`.
+
 ## 2026-11-16 17:49
 
 Add case info and progress reporting.
