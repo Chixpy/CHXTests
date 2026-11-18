@@ -32,46 +32,100 @@ type
   tCHXJSONGroupStack = specialize TList<tCHXJSONGroup>;
 
   tCHXJSONCase = class
+  {< Case data kept until the document is serialized. }
   public
     Name : String;
+    //< Case name.
     Path : String;
+    //< Path of the containing group.
     ResultType : tCHXTestResultType;
+    //< Outcome of the case.
     Asserts : Cardinal;
+    //< Assertions evaluated by the case.
     DurationMs : UInt64;
+    //< Elapsed time in milliseconds.
     FailedAssert : String;
+    //< Name of the failed assertion, if any.
     Message : String;
+    //< Failure or error message.
     BackTrace : String;
+    //< Backtrace line, if available.
     Info : String;
+    //< Persistent information sent by the case.
 
     constructor Create(const aTestResult : tCHXTestResults);
+    {< Copy the case fields from its result.
+
+      @param(aTestResult Result of the case.)
+    }
   end;
 
   tCHXJSONGroup = class
+  {< Group node kept until the document is serialized. }
   public
     Name : String;
+    //< Group name.
     Path : String;
+    //< `'.'`-joined path of the group.
     ResultType : tCHXTestResultType;
+    //< Aggregated outcome of the group.
     Asserts : Cardinal;
+    //< Assertions evaluated in the subtree.
     Cases : Cardinal;
+    //< Cases in the subtree, including skipped ones.
     Success : Cardinal;
+    //< Successful cases in the subtree.
     Skip : Cardinal;
+    //< Skipped cases in the subtree.
     SkippedGroups : Cardinal;
+    //< Skipped groups in the subtree.
     Failed : Cardinal;
+    //< Failed cases in the subtree.
     Errors : Cardinal;
+    //< Errored cases in the subtree.
     DurationMs : UInt64;
+    //< Elapsed time of the group in milliseconds.
     CaseList : tCHXJSONCaseList;
+    //< Cases declared directly by this group.
     ChildList : tCHXJSONGroupList;
+    //< Child groups.
 
     constructor Create(const aName, aPath : String);
+    {< Create an empty group node.
+
+      @param(aName Group name.)
+      @param(aPath Path of the group.)
+    }
     destructor Destroy; override;
+    {< Free the case and child lists. }
 
     procedure UpdateCounters(const aTestResult : tCHXTestResults);
+    {< Copy the counters and the result type from a group result.
+
+      @param(aTestResult Result of the group.)
+    }
   end;
 
   {
     cCHXTWJSON
   }
   cCHXTWJSON = class(cCHXTestWriter)
+  {< Writer that produces a deterministic JSON document.
+
+    The document is built in memory and serialized when the observed root group
+    ends, so a writer attached only to a child produces its own subtree. It
+    never writes to the console, ignores progress and does not use
+    `ShowSummary`.
+
+    ```pascal
+    aWriter := cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON));
+    aWriter.FileName := 'results.json';
+    ```
+
+    A single `RunCase` call emits no group events, so it produces no document.
+
+    @seealso(ucCHXTestWriter)
+  }
   private
     FRoot : tCHXJSONGroup;
     FStack : tCHXJSONGroupStack;
@@ -98,7 +152,10 @@ type
     //< Indentation added for each nesting level.
 
     constructor Create; override;
+    {< Create the writer with an empty document and `IndentStr = '  '`. }
+
     destructor Destroy; override;
+    {< Free the document, the group stack and the text lines. }
 
     property Lines : TStrings read FLines;
     //< Generated JSON document. Available when the observed root ends.
@@ -106,9 +163,25 @@ type
     //< Error raised while saving `FileName`, or an empty string.
 
     procedure OnBeforeStart; override;
+    //< Discard any previous document before the run starts.
+
     procedure OnTestStart(const TestResult : tCHXTestResults); override;
+    {< Push a new group node.
+
+      A writer attached only to a child may not receive `OnBeforeStart`, so the
+      writer also clears a finished document here.
+    }
     procedure OnTestEnd(const TestResult : tCHXTestResults); override;
+    {< Pop the group node, update its counters and, when it is the observed
+      root, serialize the document and save it if `FileName` is not empty.
+
+      I/O errors are stored in `SaveError` instead of being raised.
+    }
     procedure OnCaseEnd(const TestResult : tCHXTestResults); override;
+    {< Append the case to the current group node.
+
+      Cases executed without a group event (a bare `RunCase`) are ignored.
+    }
   end;
 
 implementation

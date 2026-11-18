@@ -1,5 +1,46 @@
 # ChangeLog 2026
 
+## 2026-11-18 20:22
+
+Document the library and its units in their current state.
+
+### `Docs/`
+- Add `index.md`: purpose, unit map, requirements, build and exit codes.
+- Add `utCHXTestResults.md`: result enum, counters and aggregation.
+- Add `ucCHXTestGroup.md`: cases, tree building, running, assertions,
+  info/progress, registration and caveats.
+- Add `ucCHXTestGroup.inc.md`: generated assertions, defines and pitfalls.
+- Add `ucCHXTestWriter.md`: event model, paths, failures and a minimal writer.
+- Add `ucCHXTWConsole.md`: output, format arguments and result strings.
+- Add `ucCHXTWJSON.md`: document schema and guarantees.
+- Add `Examples.md`: purpose and expected results of every example program.
+
+### `README.md`
+- Link the new `Docs` reference from the introduction.
+
+### `utCHXTestResults.pas`
+- Document the unit, the result enum (order and aggregation), every record
+  field, `Init` and `AddResult`.
+
+### `ucCHXTestWriter.pas`
+- Document the unit, `cCHXTestWriter`, `CurrentPath`, `AddFailure`, every
+  `On*` hook, `WriteSummary` and the failure types.
+
+### `ucCHXTestGroup.pas`
+- Document the unit, `tTestCase`, the class, cases, child groups and writers.
+- Document `Create`, `Destroy`, `AddRegistered`, `RunCase`, `RunAllCases`,
+  `GetCasePos`, `SetCaseEnabled`, `SendInfo` and `SendProgress`.
+- Document the `Do*` hooks, the `Notify*` helpers and the `AddCase*` methods.
+- Document `RegisterCHXTestGroup` and the generated comparison assertions.
+- Clarify writer ownership/propagation and the `AddWriter` overloads.
+
+### `ucCHXTWConsole.pas`
+- Document the class, properties, format strings, result strings and hooks.
+
+### `ucCHXTWJSON.pas`
+- Document the class, the internal document nodes, the hooks and the
+  serialization rules.
+
 ## 2026-11-18 16:23
 
 Add the JSON writer for automated checks.

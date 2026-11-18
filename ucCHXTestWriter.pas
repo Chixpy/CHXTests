@@ -1,5 +1,18 @@
 unit ucCHXTestWriter;
+{< Unit of cCHXTestWriter.
 
+  Base class for test result writers (also called listeners or observers).
+  The engine calls the non-virtual `Process*` methods, which track the group
+  path and collect failures before forwarding the events to the virtual `On*`
+  hooks. Descendants only override the hooks and, optionally, `WriteSummary`.
+
+  Writers added by class type through `cCHXTestGroup.AddWriter` are created
+  and freed by the group and attached to its direct children. Writers added as
+  instances stay owned by the caller and are attached only to that group.
+
+  @seealso(ucCHXTestGroup)
+  @seealso(utCHXTestResults)
+}
 {$mode ObjFPC}{$H+}{$inline OFF}{$OPTIMIZATION OFF}
 {$MODESWITCH FunctionReferences}
 {$MODESWITCH AdvancedRecords}
@@ -15,24 +28,56 @@ type
   tCHXTestFailure = record
   {< Data needed to report a failed or errored case in the final summary. }
     TestPath : String;
+    //< `'.'`-joined group path, for example `Root.Child`. Empty at root.
+
     CaseName : String;
+    //< Name of the failed or errored case.
+
     ResultType : tCHXTestResultType;
+    //< `rtFailed` for a failed assertion, `rtError` for any other exception.
+
     FailedAssert : String;
+    //< Name of the failed assertion or of the failing statement.
+
     Message : String;
+    //< Failure or error message, including soft failure details.
+
     BackTrace : String;
+    //< Backtrace line of the failure, when available.
+
     Info : String;
+    //< Persistent information sent by the case before it ended.
   end;
 
   tCHXTestFailureList = specialize TList<tCHXTestFailure>;
+  //< List of collected failures, owned by the writer.
 
 { cCHXTestWriter }
 
   cCHXTestWriter = class(tObject)
+  {< Base class for test result writers.
+
+    Override the virtual `On*` methods to render or store information, and
+    `WriteSummary` to print a summary after the run. Never override the
+    non-virtual `Process*` methods: they maintain the internal path stack used
+    by `CurrentPath` and collect the entries of `Failures` before calling the
+    hooks.
+
+    Minimal descendant:
+
+    ```
+    cMyWriter = class(cCHXTestWriter)
+      procedure OnCaseEnd(
+        const TestResult : tCHXTestResults); override;
+    end;
+    ```
+  }
   private
     FFailures : tCHXTestFailureList;
     FPathStack : TStringList;
 
     procedure AddFailure(const TestResult : tCHXTestResults);
+    //< Append a failed or errored case to `Failures`, with the current path.
 
   protected
     function CurrentPath : String;
@@ -48,7 +93,10 @@ type
     //< Call `WriteSummary` after `OnAfterEnd` when a run finishes.
 
     constructor Create; virtual;
+    {< Create the writer with `ShowSummary` enabled and empty collections. }
+
     destructor Destroy; override;
+    {< Free the collected failures and the path stack. }
 
     procedure ProcessBeforeStart;
     procedure ProcessTestStart(const TestResult : tCHXTestResults);
@@ -67,13 +115,31 @@ type
     {< Failed and errored cases collected during the current run. }
 
     procedure WriteSummary; virtual;
-    {< Render the collected failures. The default implementation does nothing. }
+    {< Render the collected failures. The default implementation does nothing.
+
+      It is called automatically after `OnAfterEnd` when `ShowSummary` is
+      enabled, and `Failures` is already complete at that point.
+    }
 
     procedure OnBeforeStart; virtual;
+    {< Called once before the observed root group starts. }
+
     procedure OnTestStart(const TestResult : tCHXTestResults); virtual;
+    {< Called when a group starts. `TestResult` is the group result so far. }
+
     procedure OnTestEnd(const TestResult : tCHXTestResults); virtual;
+    {< Called when a group ends, with its aggregated results. }
+
     procedure OnCaseStart(const TestResult : tCHXTestResults); virtual;
+    {< Called when a case starts. `TestResult` already has `rtStart`. }
+
     procedure OnCaseEnd(const TestResult : tCHXTestResults); virtual;
+    {< Called when a case ends, whatever its result.
+
+      Failed and errored cases have already been appended to `Failures` when
+      this hook runs.
+    }
+
     procedure OnCaseInfo(const TestResult : tCHXTestResults;
       const Text : String); virtual;
     {< Called when a case sends persistent information.
@@ -90,13 +156,22 @@ type
       Progress is not stored in `TestResult`.
     }
     procedure OnAfterEnd(const TestResult : tCHXTestResults); virtual;
+    {< Called once after the observed root group ends, before `WriteSummary`.
+
+      A writer attached only to a child group never receives this event,
+      because only the root group emits it.
+    }
   end;
 
   tCHXTestWriterClass = class of cCHXTestWriter;
+  //< Writer class reference used by `cCHXTestGroup.AddWriter`.
 
   cCHXTestWriterGenList  = specialize tObjectList<cCHXTestWriter>;
+  //< Owning list of writers; used for the writers created by the engine.
+
   cCHXTestWriterList  = class(cCHXTestWriterGenList)
   end;
+  //< List of writers attached to a group.
 
 implementation
 

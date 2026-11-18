@@ -63,59 +63,131 @@ type
 }
 
   cCHXTWConsole = class(cCHXTestWriter)
+  {< Writer that renders the run as indented, coloured-by-symbol text.
+
+    Every line is produced from one of the `*Fmt` properties with `Format`, so
+    the layout can be changed without touching the class. The default format
+    strings are the `ksDef*Fmt` constants.
+
+    ```pascal
+    Console := cCHXTWConsole(MainTest.AddWriter(cCHXTWConsole));
+    Console.ShowInfo := True;
+    Console.ShowProgress := True;
+    ```
+
+    The totals line is printed in `OnAfterEnd` and the collected failures and
+    errors in `WriteSummary`, so the summary goes below the totals.
+
+    @seealso(ucCHXTestWriter)
+  }
   protected
     FProgressShown : Boolean;
+    //< `True` while a transient progress line is on screen.
     FProgressLen : Integer;
+    //< Length of the last progress line, used to erase it.
     FCaseStartLine : String;
+    //< Case line kept to redraw it after progress output.
 
     function ResultStr(const ResultType : tCHXTestResultType) : String;
+    //< Symbol and text for a result, from the `*Str` properties.
     function FormatStr(const aString : String;
       const TestResults : tCHXTestResults) : String;
+    {< Expand a format string with the fields of `TestResults`.
+
+      @param(aString Format string, usually one of the `*Fmt` properties.)
+      @param(TestResults Data used as positional arguments.)
+      @returns(The formatted text, or an empty string when `aString` is
+        empty.)
+    }
     procedure WriteStr(const aString : String;
       const TestResults : tCHXTestResults);
+    //< Format and write a string without a line break.
     procedure WriteInfo(const TestResults : tCHXTestResults);
+    //< Write `TestResults.Info` indented below the case line.
     procedure WriteSummaryItem(const Caption, Text : String);
+    //< Write one `Caption: Text` line of the final summary, if not empty.
 
   public
     TextWidth : Integer;
-    //< Width for wrap messages
+    //< Width for wrap messages (currently not used by the writer).
+
     ShowTime : Boolean;
     //< Show actual time where a test started.
+
     ShowInfo : Boolean;
     //< Render the persistent information sent by cases.
+
     ShowProgress : Boolean;
     //< Render transient progress using carriage returns.
 
     IndentStr : String;
+    //< Padding added for each nesting level.
+
     BeforeStartFmt : String;
+    //< Format printed once before the run starts.
     AfterEndFmt : String;
+    //< Format printed once after the run ends (empty by default).
     TestStartFmt : String;
+    //< Format of a group start line.
     TestEndFmt : String;
+    //< Format of a group end line.
     CaseStartFmt : String;
+    //< Format of a case start line.
     CaseEndFmt : String;
+    //< Format of a case end line.
     CaseFailMsgFmt : String;
+    //< Format of the failure text; printed for non-successful cases.
     CaseBackTraceMsgFmt : String;
+    //< Format of the backtrace line; printed for non-successful cases.
 
     StartStr : String;
+    //< Text for `rtStart`.
     SkipStr : String;
+    //< Text for skipped cases.
     SkipGroupStr : String;
     //< String for skipped groups in the final totals.
     SuccessStr : String;
+    //< Text for successful results.
     FailStr : String;
+    //< Text for failed results.
     ErrorStr : String;
+    //< Text for errored results.
 
     constructor Create; override;
+    {< Create the writer with the default formats, symbols and flags. }
+
     destructor Destroy; override;
 
     procedure OnBeforeStart; override;
+    //< Print `BeforeStartFmt` with an empty result.
     procedure OnTestStart(const TestResults : tCHXTestResults); override;
+    //< Print the group start line.
     procedure OnCaseStart(const TestResults : tCHXTestResults); override;
+    {< Print the case start line and reset the progress state.
+
+      The line is kept so it can be redrawn after progress output.
+    }
     procedure OnCaseEnd(const TestResults : tCHXTestResults); override;
+    {< Erase any progress line, print the case end line and its details.
+
+      Failure details and backtrace are printed for failed and errored cases
+      only. `Info` is printed when `ShowInfo` is enabled.
+    }
     procedure OnCaseProgress(const TestResults : tCHXTestResults;
       const Text : String; const Percent : Integer); override;
+    {< Redraw the progress line when `ShowProgress` is enabled.
+
+      `Percent` is shown as `Text (N%)` when it is 0..100, and as plain `Text`
+      when it is -1.
+    }
     procedure OnTestEnd(const TestResults : tCHXTestResults); override;
+    //< Print the group end line.
     procedure OnAfterEnd(const TestResults : tCHXTestResults); override;
+    //< Print the totals block; the summary follows it.
     procedure WriteSummary; override;
+    {< Print the collected failures and errors with assertion, message, info
+      and backtrace. Nothing is printed when there are no failures.
+    }
   end;
 
 

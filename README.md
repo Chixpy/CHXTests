@@ -3,6 +3,20 @@
 Small Free Pascal library to run groups of test cases and report successes,
 failures, errors and skipped work.
 
+## Documentation
+
+- [Docs/index.md](Docs/index.md): technical reference, unit by unit.
+- [Docs/ucCHXTestGroup.md](Docs/ucCHXTestGroup.md): test groups, cases,
+  assertions and exit codes.
+- [Docs/ucCHXTestWriter.md](Docs/ucCHXTestWriter.md),
+  [Docs/ucCHXTWConsole.md](Docs/ucCHXTWConsole.md) and
+  [Docs/ucCHXTWJSON.md](Docs/ucCHXTWJSON.md): writers.
+- [Docs/Examples.md](Docs/Examples.md): example programs and their expected
+  output.
+
+This README is the manual for end users; the `Docs` directory describes the
+library for other programs.
+
 ## Building the examples
 
 Requirements: FPC 3.2+ (tested with 3.3.1). No external dependencies beyond
@@ -160,9 +174,10 @@ Console rendering is opt-in:
 ## Writers and the final summary
 
 The engine and the writers are decoupled. `AddWriter(Class)` creates and owns
-the writer; passing a writer instance does not transfer ownership. Writers are
-propagated to existing and future children, but adding one to a child never
-propagates upward.
+the writer; passing a writer instance does not transfer ownership. Writers
+added by class are propagated to the direct children, existing and future; a
+writer added as an instance stays in that group only. Adding a writer to a
+child never propagates upward.
 
 Writers receive the virtual callbacks `OnBeforeStart`, `OnTestStart`,
 `OnCaseStart`, `OnCaseEnd`, `OnCaseInfo`, `OnCaseProgress`, `OnTestEnd` and

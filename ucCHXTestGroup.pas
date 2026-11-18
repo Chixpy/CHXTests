@@ -1,6 +1,26 @@
 unit ucCHXTestGroup;
 {< Unit of cCHXTestGroup.
 
+  The test engine. A `cCHXTestGroup` descendant holds test cases (its
+  published, parameterless methods), child groups and writers, and runs them
+  while reporting events through the writers.
+
+  Assertions (`Must*` and `May*` methods) live in `cCHXTestGroup` itself, so a
+  test case only has to call them. The generic comparison assertions are
+  generated from `ucCHXTestGroup.inc`.
+
+  Basic flow:
+
+  ```
+  MainTest := cTestCases.Create('MainTest');
+  MainTest.AddWriter(cCHXTWConsole);
+  ExitCode := MainTest.RunAllCases;
+  MainTest.Free;
+  ```
+
+  @seealso(ucCHXTestWriter)
+  @seealso(utCHXTestResults)
+
   (c) 2026 Chixpy https://github.com/Chixpy
 }
 {$mode ObjFPC}{$H+}{$inline OFF}{$OPTIMIZATION OFF}
@@ -14,6 +34,11 @@ uses
   utCHXTestResults, ucCHXTestWriter;
 
 resourcestring
+  {< Messages used by assertions and by the result reporting.
+
+    They are plain resourcestrings, so a program can translate them with the
+    usual FPC mechanisms.
+  }
   rsUnexpectedException = 'Unexpected Exception: %s';
   rsNotTrue = 'Condition is not True';
   rsNotFalse = 'Condition is not False';
@@ -31,29 +56,48 @@ resourcestring
 
 type
   tTestMethod = procedure of object;
+  //< Test case method: a published, parameterless method of a test group.
 
 {
   tTestCase
 }
 
   tTestCase = record
-  {< Individual test case info. }
+  {< Individual test case info.
+
+    The methods of a group are discovered in its constructor and stored as one
+    record per case. `TestCases` is a list of records, so read a copy, modify it
+    and assign it back to update an entry.
+  }
     CaseName : String;
+    //< Name of the method and of the case.
+
     Enabled : Boolean;
+    //< Disabled cases are reported as skipped and never called.
+
     Method : tTestMethod;
+    //< Bound method pointer built from the VMT method address.
+
     TestResults : tCHXTestResults;
+    //< Result of the last run of the case.
   end;
   pTestCase = ^tTestCase;
+  //< Pointer to a case, used while the case runs.
 
   cTestCaseGenList = specialize tList<tTestCase>;
   cTestCaseList = class(cTestCaseGenList);
+  //< List of test cases of one group.
 
 {
   eCHXTestFailed
 }
 
   eCHXTestFailed = class(Exception);
-  //< Exception returned by Assertions/Check/Tests.
+  {< Exception raised by assertions to abort the current case.
+
+    The engine catches it in `RunCase` and reports the case as `rtFailed`. Do
+    not raise it directly unless you are writing a custom assertion.
+  }
 
 {
   cCHXTestGroup
@@ -62,22 +106,44 @@ type
   cCHXTestGroup = class;
   cCHXTestGroupList = class;
   tCHXTestGroupClass = class of cCHXTestGroup;
+  //< Test group class reference, used by `RegisterCHXTestGroup`.
 
   {$PUSH}
   {$TYPEINFO ON} // or {.$M+}
   cCHXTestGroup = class(TPersistent)
+  {< Base class for test groups.
+
+    A group owns test cases, child groups and writers. Descendants add their
+    cases as **published, parameterless** methods; they are discovered at
+    runtime from the VMT by the constructor, so public and private methods are
+    ignored and `{$M+}` in the class declaration is not needed.
+
+    The engine calls `RunAllCases` recursively. Groups with `Enabled = False`
+    and groups without cases or children are reported as skipped.
+
+    Override `DoBeforeStart`, `DoAfterEnd`, `DoTestStart`, `DoTestEnd`,
+    `DoCaseStart` or `DoCaseEnd` to run code around the events of this group.
+    Writers (`On*` callbacks) are the decoupled alternative.
+
+    @seealso(ucCHXTestWriter)
+  }
   private
     FTestName : String;
     FTreeDepth : Cardinal;
 
     FailedAssert : String;
+    //< Name of the assertion or statement that failed in the current case.
+
     FSoftFailures : TStringList;
     //< Soft failures recorded during the current case.
     FCurrentCase : pTestCase;
     //< Case executing now, if any.
 
     function SoftFailureMessage : String;
+    //< Text listing the soft failures of the current case, with a header.
+
     function CombinedMessage(const aMessage : String) : String;
+    //< Append the soft failure text to `aMessage`, if there is any.
 
     procedure SetTestName(const aTestName : String);
     procedure SetTreeDepth(const aTreeDepth : Cardinal);
@@ -92,31 +158,71 @@ type
     }
 
     procedure NotifyBeforeStart;
+    //< Forward the before-start event to every attached writer.
     procedure NotifyAfterEnd;
+    {< Forward the after-end event and add this group to `NSubTests`.
+
+      Only the root group receives it, so the final group count includes the
+      root itself.
+    }
     procedure NotifyTestStart;
+    //< Forward the group start event to every attached writer.
     procedure NotifyTestEnd;
+    //< Forward the group end event to every attached writer.
     procedure NotifyCaseStart(const aCaseResult : tCHXTestResults);
+    //< Forward the case start event to every attached writer.
     procedure NotifyCaseEnd(const aCaseResult : tCHXTestResults);
+    //< Forward the case end event to every attached writer.
     procedure NotifyCaseInfo(const aCaseResult : tCHXTestResults;
       const Text : String);
+    //< Forward persistent information to every attached writer.
     procedure NotifyCaseProgress(const aCaseResult : tCHXTestResults;
       const Text : String; const Percent : Integer);
+    //< Forward transient progress to every attached writer.
 
   protected
     OwnedChilds : cCHXTestGroupList;
-    //< Subtests owned (Added by class type)
+    //< Child groups created by class type; they are freed on Destroy.
+
     OwnedWriters : cCHXTestWriterList;
-    //< Writers owned (Added by class type)
+    //< Writers created by class type; they are freed on Destroy.
 
     NCaseAsserts : Cardinal;
     //< Number of asserts checked in current case.
 
     procedure TestResultInit;
+    {< Reset `TestResults` for a new run.
+
+      The name, the nesting depth and the counters of the groups and cases
+      declared directly by this group are set; the result type is `rtNone`.
+    }
 
     procedure AddCaseSkip(const aCase : pTestCase);
+    {< Mark a case as skipped (`rtSkip`, `NSkip = 1`).
+
+      @param(aCase Case being run.)
+    }
     procedure AddCaseSuccess(const aCase : pTestCase);
+    {< Mark a case as successful (`rtSuccess`, `NSuccess = 1`).
+
+      @param(aCase Case being run.)
+    }
     procedure AddCaseFail(const aCase : pTestCase; const Msg: String);
+    {< Mark a case as failed (`rtFailed`, `NFailed = 1`).
+
+      The current `FailedAssert` is copied into the case result.
+
+      @param(aCase Case being run.)
+      @param(Msg Failure message.)
+    }
     procedure AddCaseError(const aCase : pTestCase; const Msg: String);
+    {< Mark a case as errored (`rtError`, `NError = 1`).
+
+      The current `FailedAssert` is copied into the case result.
+
+      @param(aCase Case being run.)
+      @param(Msg Error message.)
+    }
 
     function CallerAddr(const ParentDepth : SizeInt = 1) : Pointer;
     {< Get the memory address of a parent caller function.
@@ -128,12 +234,17 @@ type
     }
 
     procedure DoBeforeStart; virtual;
+    //< Called on the root group before the run starts.
     procedure DoAfterEnd; virtual;
+    //< Called on the root group after the run ends.
     procedure DoTestStart; virtual;
+    //< Called when this group starts.
     procedure DoTestEnd; virtual;
+    //< Called when this group ends.
     procedure DoCaseStart(const aCaseResult : tCHXTestResults); virtual;
+    //< Called before a case of this group runs.
     procedure DoCaseEnd(const aCaseResult : tCHXTestResults); virtual;
-    {< Methods called at some events. }
+    //< Called after a case of this group runs, with its final result.
 
     procedure MustFail(const Sender : String; const Msg : String;
       ErrAdrs: Pointer);
@@ -155,6 +266,11 @@ type
 
       The case keeps running. When it finishes, the recorded failures make the
       case fail unless a hard assertion has already aborted it.
+
+      @param(Sender Sender's name of the fail or failed statement.)
+      @param(Msg More detailed fail message.)
+      @param(ErrAdrs Address of the failed method. Kept for symmetry with
+        `MustFail`; the soft failure is stored with `Sender` and `Msg`.)
     }
 
   {
@@ -168,19 +284,37 @@ type
 
   {
     Boolean and general conditions.
+
+    They raise `eCHXTestFailed` when the condition is not met.
   }
     procedure MustTrue(const Condition : Boolean;
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+    {< Check that `Condition` is `True`.
+
+      @param(Condition Condition to check.)
+      @param(Sender Name of the failing statement. Defaults to the method.)
+      @param(Msg Failure message. Defaults to `rsNotTrue`.)
+      @param(ErrAdrs Address of the failed method. `nil` uses the caller.)
+    }
     procedure MustFalse(const Condition : Boolean;
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+    {< Check that `Condition` is `False`.
+
+      @param(Condition Condition to check.)
+      @param(Sender Name of the failing statement. Defaults to the method.)
+      @param(Msg Failure message. Defaults to `rsNotFalse`.)
+      @param(ErrAdrs Address of the failed method. `nil` uses the caller.)
+    }
 
   {
     Soft assertions: record the failure without aborting the case.
   }
     procedure MayTrue(const Condition : Boolean;
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+    {< Soft version of `MustTrue`: record a failure and continue. }
     procedure MayFalse(const Condition : Boolean;
       Sender : String = ''; Msg : String = ''; ErrAdrs: Pointer = nil);
+    {< Soft version of `MustFalse`: record a failure and continue. }
 
   {
     Exception assertions.
@@ -275,6 +409,16 @@ type
       - `MustGreater` (`>`) and `MustLess` (`<`).
       - `MustGrtEqu` (`>=`) and `MustLssEqu` (`<=`).
 
+    Types generated in this unit:
+
+      - `Int64`, `QWord`, `Char`, `String`, `Currency`: equality and order.
+      - `Single`, `Double`: `SameValue` with an extra `Sigma` argument instead
+        of `=` and `<>`, plus order comparisons.
+      - `Pointer`, `TObject`: equality only.
+
+    The float overloads take `(Value, Correct, Sigma)`; the comparison order
+    does not matter for `Sigma`.
+
     To be clear: `Value` is the left value and `Correct` is the right one.
     "/Value/ must be greater/less than (or equal to) /Correct/".
 
@@ -287,7 +431,7 @@ type
       comparison message.
 
       If not empty, `Msg` will be parsed with
-      `Format(Msg, [String(Correct), String(Value)])`. In other words,
+      `Format(Msg, [String(Value), String(Correct)])`. In other words,
       `%0:s` will be `Value` value and `%1:s` as `Correct`.)
 
     @param(ErrAdrs Address of the failed method. `nil` sets it to the
@@ -338,23 +482,48 @@ type
 
   public
     TestCases : cTestCaseList;
-    //< List of cases in this test.
+    {< Cases of this group, in discovery order.
+
+      It is a list of **records**: read a copy, change it and assign it back
+      (`TestCases[i] := aCase`).
+    }
     TestChilds : cCHXTestGroupList;
-    // Subtests list.
+    //< Child groups, in the order they were added.
+
     TestWriters : cCHXTestWriterList;
-    //< Writers for tests results
+    //< Writers that receive the events of this group and its cases.
 
     TestResults : tCHXTestResults;
+    //< Aggregated result of the last run of this group.
 
-    Enabled : Boolean; // If disabled, skip test group.
+    Enabled : Boolean;
+    //< If `False`, the group is skipped and its children are not visited.
 
     property TestName : String read FTestName write SetTestName;
+    //< Name of the group; it is also copied into `TestResults.TestName`.
+
     property TreeDepth : Cardinal read FTreeDepth;
+    //< Nesting level; `0` for a root group.
 
     constructor Create(aTestName : String = '');
+    {< Create a group and discover its test cases.
+
+      The published, parameterless methods of the class are enumerated from the
+      VMT method table and added to `TestCases`, all enabled. Public and
+      private methods are ignored.
+
+      @param(aTestName Name of the group. Defaults to `ClassName`.)
+    }
+
     destructor Destroy; override;
+    {< Free the cases and the groups and writers owned by this group. }
 
     procedure AddRegistered;
+    {< Add every group registered with `RegisterCHXTestGroup` as a child.
+
+      The registered classes are instantiated with their default name. Call it
+      after the group is created, usually in the program's main block.
+    }
 
     function AddChildTest(const aTestClass : tCHXTestGroupClass;
       const aTestName : String = ''): cCHXTestGroup; overload;
@@ -362,6 +531,9 @@ type
 
       Creates an instance `aTestClass` and returns it. Tests added this way
       ***will be freed on Destroy***.
+
+      Child names containing `.`, `/` or `\` create intermediate
+      `cCHXEmptyTestGroup` placeholders, so a tree can be built from names.
 
       @param(aTestClass Class type inherited from `cCHXTestGroup`.)
       @param(aTestName Custom name for the test group. Defaults to `ClassName`.)
@@ -373,6 +545,10 @@ type
 
       Tests added this way ***will NOT be freed on Destroy***.
 
+      Adding the same instance twice is ignored. When a child with the same
+      name already exists, an empty placeholder is replaced; a real group is
+      kept and the new one is not added.
+
       @param(aTest Instance of a class inherited from `cCHXTestGroup`.)
       @param(aTestName Custom name for the test group. Defaults to `ClassName`.)
     }
@@ -382,23 +558,43 @@ type
     {< Add a test results writer (or listener or observer) by class type.
 
       Creates an instance `WriterClass` of and returns it. Writters added this
-      way ***will be freed on Destroy***.
+      way ***will be freed on Destroy***. The writer is also attached to the
+      current direct children and to the children added later; it is not
+      propagated recursively to grandchildren.
 
-      @param(WriterClass Class type inherited from `tCHXTestWriterClassssName`.)
+      @param(WriterClass Class type inherited from `cCHXTestWriter`.)
       @returns(Instance of `WriterClass` created (as a `cCHXTestWriter`).)
     }
     procedure AddWriter(const Writer : cCHXTestWriter); overload;
     {< Add an instance of a test results writer (or listener or observer).
 
-      Writters added this way ***will NOT be freed on Destroy***.
+      Writters added this way ***will NOT be freed on Destroy*** and are not
+      propagated to the children. Adding the same instance twice is ignored.
+      Adding a writer to a child never propagates it to the parent.
 
-      @param(WriterClass Class type inherited from `tCHXTestWriterClassssName`.)
-      @returns(Instance of `WriterClass` created (as a `cCHXTestWriter`).)
+      @param(Writer Instance of a class inherited from `cCHXTestWriter`.)
     }
     procedure AddWriters(const WriterList : cCHXTestWriterList);
+    {< Add every writer of `WriterList`, skipping the ones already attached.
+
+      @param(WriterList Writers to attach; they are not freed by this group.)
+    }
 
     function GetCasePos(const aCaseName: String): Integer;
+    {< Position of a case in `TestCases`, compared case-insensitively.
+
+      @param(aCaseName Name of the case.)
+      @returns(Index of the case, or `-1` when it does not exist.)
+    }
     procedure SetCaseEnabled(const aCaseName: string; const aEnabled: Boolean);
+    {< Enable or disable a case by name.
+
+      Only the first case with that name is changed; the name comparison is
+      case-insensitive.
+
+      @param(aCaseName Name of the case.)
+      @param(aEnabled New value for `Enabled`.)
+    }
 
     procedure SendInfo(const Text : String);
     {< Send persistent information from the current case.
@@ -415,13 +611,43 @@ type
     }
 
     function RunCase(const CaseName : String) : Integer;
+    {< Run one case by name.
+
+      Group events are not emitted, so writers only receive the case events.
+      The case result is stored back in `TestCases`.
+
+      @param(CaseName Name of the case, compared case-insensitively.)
+      @returns(Exit code: `0` success, `1` failure, `2` error. A missing case
+        also returns `2`.)
+    }
     function RunCase(TestCase : pTestCase) : Integer;
+    {< Run one case from a pointer.
+
+      The pointed record is updated in place with the result. Use it when the
+      caller already has the case position.
+
+      @param(TestCase Case to run; it must belong to this group.)
+      @returns(Exit code: `0` success, `1` failure, `2` error.)
+    }
     function RunAllCases : Integer; virtual;
+    {< Run every case of this group and of its children, recursively.
+
+      The root group emits the before-start and after-end events; children emit
+      only their own test events. Disabled groups and groups without cases or
+      children are reported as skipped. The result of the group is the highest
+      result of its cases and children.
+
+      @returns(Exit code of the whole run: `0` success, `1` failure, `2` error
+        and `3` when nothing was executed.)
+    }
   end;
   {$POP}
 
   cCHXTestGroupGenList = specialize TObjectList<cCHXTestGroup>;
+  //< Owning list of test groups.
+
   cCHXTestGroupList = class(cCHXTestGroupGenList);
+  //< List of test groups used for the children of a group.
 
   cCHXEmptyTestGroup = class(cCHXTestGroup);
   {< Empty group class for filling the tree structure. If a proper test with
@@ -437,14 +663,29 @@ type
 }
   tCHXRegTest = record
     TestName : String;
+    //< Name used when the group is instantiated.
+
     TestClass : tCHXTestGroupClass;
+    //< Class to create.
   end;
 
 procedure RegisterCHXTestGroup(const aTGClass : tCHXTestGroupClass;
   aName : String = '');
+{< Register a group class for later use with `AddRegistered`.
+
+  Registration is global and done once per name: registering the same name
+  again is ignored. The group is created with default properties, so a name
+  given here becomes the group name.
+
+  @param(aTGClass Class type inherited from `cCHXTestGroup`.)
+  @param(aName Name of the registered group. Defaults to `ClassName`.)
+
+  @seealso(cCHXTestGroup.AddRegistered)
+}
 
 var
   CHXRegTests : Array of tCHXRegTest;
+  //< Registered test groups, filled by `RegisterCHXTestGroup`.
 
 implementation
 
