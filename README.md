@@ -1,6 +1,7 @@
 # CHX Test Runner
 
-Class to run groups of test cases and report errors, failures and other stuff.
+Small Free Pascal library to run groups of test cases and report successes,
+failures, errors and skipped work.
 
 ## Building the examples
 
@@ -15,25 +16,27 @@ From the `Examples/` directory:
 Executables are written to `Examples/bin` and compiled units to
 `Examples/lib`.
 
-`SelfTest.pas` checks the runner itself: it exits with `0` when all its
-expected results match, and with `1` otherwise.
+The examples cover different parts of the runner:
 
-`SoftTest.pas` shows soft assertions: it exits with `0` when its intentional
-soft failures and their combined messages are produced.
-
-`ProgressTest.pas` enables `ShowInfo` and `ShowProgress` to demonstrate
-persistent case information and a transient progress loop. Its optional first
-argument sets the number of iterations; the default is 10.
+- `BasicTest`: one success, one failure, one error and one disabled case.
+- `ExceptionTest`: expected, missing and wrong exceptions.
+- `SoftTest`: soft failures and their combination with hard failures.
+- `ProgressTest`: `ShowInfo` and `ShowProgress`; its optional first argument
+  sets the number of iterations (default 10).
+- `SelfTest`: checks the runner itself. It exits with `0` when all expected
+  results match and with `1` otherwise.
+- `SimplestTest`, `SubTests`, `Subsubtest`, `WriterAfterChild` and
+  `WriterInChild`: minimal programs for groups, nesting and writer ownership.
 
 ## Simple use program
 
-1. Create a `cCHXTestGroup` descendant, with tests procedures in published
-  section.
-2. Add a `cCHXTestWriter` descendant class to previous `cCHXTestGroup`.
-3. `[cCHXTestGroupChild].RunAllCases`
-4. For more verbosity, compile with optimizations off and `-gl` (`lineinfo`
-  unit) parameter.
-  
+1. Create a `cCHXTestGroup` descendant with test procedures in the
+   `published` section.
+2. Add a `cCHXTestWriter` descendant class to the group.
+3. Call `RunAllCases` and assign its result to `ExitCode`.
+4. For more verbose backtraces, compile with optimizations off and `-gl`
+   (`lineinfo`).
+
 ```pascal
 program SimpleTest;
 
@@ -77,49 +80,125 @@ var
   MainTest : cTestCases;
 
 begin
-  MainTest := cTestCases.Create;
+  MainTest := cTestCases.Create('SimpleTest');
   MainTest.AddWriter(cCHXTWConsole);
-  ExitCode := MainTest.RunAllCases;
-  MainTest.Free;
+  try
+    ExitCode := MainTest.RunAllCases;
+  finally
+    MainTest.Free;
+  end;
 end.
 ```
 
 `RunAllCases` returns `0` on success, `1` on failure, `2` on error and `3`
-when nothing was executed (skipped). Assign it to `ExitCode` for batch use.
+when nothing was executed (skipped or not started). `RunCase` returns the
+same kind of code for one case, and returns `2` when the requested case does
+not exist.
+
+## Test semantics
+
+- Cases are the **published, parameterless** methods of a `cCHXTestGroup`
+  descendant. They are discovered from the VMT at runtime; public and private
+  methods are ignored.
+- Groups can contain cases and other groups. Child names containing `.`, `/`
+  or `\` create intermediate groups automatically.
+- A disabled group returns `rtSkip` and increments `NSkippedGroups`. Its own
+  cases are counted as skipped, but its children are not visited.
+- A group with no cases or children is also reported as skipped and increments
+  `NSkippedGroups`.
+- A failed assertion produces `rtFailed`. Any other exception produces
+  `rtError`.
+- The result of a group is the highest result of its cases and child groups:
+  `rtNone` < `rtStart` < `rtSkip` < `rtSuccess` < `rtFailed` < `rtError`.
+- `NSkip` counts skipped cases; `NSkippedGroups` counts skipped groups. They
+  are deliberately separate.
+
+## Assertions
+
+- `Must*` assertions raise `eCHXTestFailed` and abort the current case.
+- `May*` soft assertions record the failure, keep the case running and mark it
+  as failed at the end. If a later `Must*` also fails, both messages are
+  reported.
+- `MustRaise`/`MustNotRaise` check exceptions; `MayRaise`/`MayNotRaise` are
+  their soft variants. They accept `TProcedure` and method references; an
+  exception matches when it is the expected class or a subclass.
+- An internal `eCHXTestFailed` raised inside a raise assertion is re-raised
+  unless it is the expected class, so an inner assertion failure is not hidden.
+- `ucCHXTestGroup.inc` can be included to generate the assertion overloads for
+  custom types.
+
+## Info and progress
+
+Cases can report information while they run:
+
+- `SendInfo(Text)` appends persistent text to the active case's
+  `TestResults.Info`, joined with `LineEnding`. It is also included in the
+  final failure summary.
+- `SendProgress(Text, Percent)` sends transient progress. `Percent` is in the
+  range 0..100, or `-1` when unknown; progress is not stored.
+
+Console rendering is opt-in:
+
+- `ShowInfo := True` prints the persistent information at case end.
+- `ShowProgress := True` renders progress with carriage returns and restores
+  the case line when the case finishes.
+
+## Writers and the final summary
+
+The engine and the writers are decoupled. `AddWriter(Class)` creates and owns
+the writer; passing a writer instance does not transfer ownership. Writers are
+propagated to existing and future children, but adding one to a child never
+propagates upward.
+
+Writers receive the virtual callbacks `OnBeforeStart`, `OnTestStart`,
+`OnCaseStart`, `OnCaseEnd`, `OnCaseInfo`, `OnCaseProgress`, `OnTestEnd` and
+`OnAfterEnd`. The engine calls these through the non-virtual `Process*`
+methods, which also maintain the group path and collect failures. Override the
+`On*` hooks (and optionally `WriteSummary`), not the `Process*` methods.
+
+Every writer has:
+
+- `Failures`: a list of `tCHXTestFailure` entries with `TestPath`, `CaseName`,
+  `ResultType`, `FailedAssert`, `Message`, `BackTrace` and `Info`. `TestPath`
+  is the `.`-joined group path, for example `Root.Child`.
+- `ShowSummary`: enabled by default. When the run finishes, the writer calls
+  `WriteSummary` after `OnAfterEnd`.
+- `WriteSummary`: a virtual method that does nothing in the base class. The
+  console writer renders the collected failures and errors below the totals.
+
+To disable the summary, set `ShowSummary := False` on the writer.
+
+The console totals use separate strings for skipped groups and cases:
+
+```text
+  ┆ ✅ Success: 1 / ⛔ Skipped (G): 0 / ⚠️ Skipped (C): 1 / ❌ Failed: 1 / ☢️ ¡ERROR!: 1
+```
+
+`SkipGroupStr`, `SkipStr`, `SuccessStr`, `FailStr` and `ErrorStr` can be
+customized. The symbols and labels depend on the terminal and its font.
 
 ## Features
 
-- Simple and functional.
-- Nested subtests can be added as a tree (manually or by test name).
-- Automatically create tree structure of multiple levels based on name.
-- Test groups and test cases can be disabled.
-- Auto register testing classes in units. I don't like globals, but in this
-  specific case this kind of program will not do anything more.
-- Testing engine and Test Writers (Listeners / Observers) are decoupled.
-- Various Writers can report simultanealy.
-- Virtual method at start and end of test cases, same for (sub)tests and global.
-- Include file `ucCHXTestGroup.inc` for _easy_ creation of asserts for custom
-  types using FPC macros.
-- Statistics about time spent and total assertions made.
-- Writers are notifyed in real time (like an _Observer_ pattern), so a console
-  writer can show some activity while waiting...
-- Returns a value that can be used as a program _exit code_ (`0` success,
-  `1` failure, `2` error, `3` skipped/nothing executed), for example for
-  running in a batch.
-- `Must*` hard assertions and `May*` soft assertions. A soft failure lets the
-  case continue and marks it as failed at the end; if a later `Must*` fails,
-  both messages are reported.
-- Exception assertions: `MustRaise`, `MustNotRaise`, `MayRaise` and
-  `MayNotRaise`, including method-reference overloads.
-- Cases can send persistent information with `SendInfo` and transient progress
-  with `SendProgress`. Console rendering is opt-in through `ShowInfo` and
-  `ShowProgress`.
-- TODO: More assertions for inheritance, class types testing and nil.
-  More especifically:
-  - String: Empty, _Nil_ (specially `PChar`). Regex matching.
-  - Integer types: Positive (for signed), Zero.
-  - Float types: Positive, Zero, _Nan_, Infinite (Pos, Neg or both).
-  - Interfaces:
-  - Classes: Inheritance, Class matching, _Nil_.
-  - Tecnically all are shortcuts of `if Cond then Fail()` (except exceptions)
-- TODO: Auto register writers...
+- Nested groups, manually or from names with separators.
+- Auto-registration of testing classes in units.
+- Decoupled testing engine and writers, with several writers at once.
+- Real-time callbacks while tests run.
+- Hard and soft assertions, exception assertions and custom-type assertions.
+- Statistics for time, assertions, cases and groups.
+- Exit codes suitable for batch use.
+- Collected failure/error summary with case information.
+
+## Pending ideas
+
+- More assertions for inheritance, class matching and `nil`.
+  More specifically:
+  - Strings: empty and nil values (especially `PChar`), regular expressions.
+  - Integers: positive (signed types) and zero.
+  - Floats: positive, zero, NaN and infinities.
+  - Interfaces.
+  - Classes: inheritance, class matching and `nil`.
+- Auto-register writers.
+- Select cases and groups with regular expressions.
+- Word wrap that preserves indentation in the console writer.
+- Configurable progress update interval.
+- Additional writers: JSON, XML, HTML and Markdown.

@@ -1360,11 +1360,9 @@ begin
             aTestChild.Free;
           end;
         end;
-        // else Same name but different intance.
-        // Not sure what to do, by now it's ignored.
-        // It can be in OwnedChilds, but it is not in TestChilds.
-        // ToDo: Send a message to writers when info/status is implemented?
-        // TODO: When reports were implemented... Add stIgnored state
+        // Same name but different instance: ignore it to avoid duplicates.
+        // It can be in OwnedChilds, but it is not in TestChilds. A future
+        // stIgnored state could report it through the writers.
         Exit;
       end;
     end; // for aTestChild in TestChilds
@@ -1447,13 +1445,14 @@ var
 begin
   for i := 0 to (TestCases.Count - 1) do
   begin
-    // ToDo: Maybe, Regex comparison
+    // Future: support regular expressions; then do not stop at the first
+    // match.
     if CompareText(TestCases[i].CaseName, aCaseName) = 0 then
     begin
       TempCase := TestCases[i];
       TempCase.Enabled := aEnabled;
       TestCases[i] := TempCase;
-      Break; // Don't break with Regex
+      Break;
     end;
   end;
 end;

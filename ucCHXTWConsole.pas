@@ -3,8 +3,6 @@ unit ucCHXTWConsole;
 
   (c) 2026 Chixpy https://github.com/Chixpy
 
-  ToDo: Make proper report at the end, listing failures and errors.
-
 }
 {$mode ObjFPC}{$H+}{$inline OFF}{$OPTIMIZATION OFF}
 {$MODESWITCH FunctionReferences}
@@ -322,7 +320,7 @@ procedure cCHXTWConsole.OnAfterEnd(const TestResults : tCHXTestResults);
 var
   Time : Double;
 begin
-  // ToDo: Make a proper report and configurable...
+  // Totals are printed before the collected failure summary.
 
   // Converting MS to TTimeDate
   Time := TestResults.TimeElapsed / MSecsPerDay;

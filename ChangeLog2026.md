@@ -1,5 +1,34 @@
 # ChangeLog 2026
 
+## 2026-11-18 01:37
+
+Document runner semantics and remove stale TODOs.
+
+### `README.md`
+- Reorganize the examples and usage sections.
+- Document test semantics: published cases, skips, result types and exit codes.
+- Document hard/soft assertions, exception assertions and custom types.
+- Document persistent info, transient progress and the console opt-in switches.
+- Document writer ownership, collected failures, `ShowSummary`, `WriteSummary`
+  and the console results line.
+- Move the remaining unimplemented assertions and writer ideas to a pending
+  ideas section instead of inline TODOs.
+
+### `ucCHXTWConsole.pas`
+- Remove the stale TODO comments now that the final failure report exists.
+
+### `ucCHXTestGroup.pas`
+- Clarify that duplicate child names are ignored and that a future
+  `stIgnored` state could report them.
+- Mark regular-expression case selection as a future feature.
+
+### Verification
+- Rebuild and run all ten examples; each exits with `0` and reports
+  `0 unfreed memory blocks`.
+- Compile and run the README example; it exits with `1` by design because of
+  the intentional `MustTrue(False)`.
+- `SelfTest` runs 14 cases with 181 assertions.
+
 ## 2026-11-18 01:18
 
 Add failure summaries and refresh the commit workflow.
