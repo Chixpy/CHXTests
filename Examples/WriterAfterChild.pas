@@ -6,7 +6,7 @@ program WriterAfterChild;
 {$MODE ObjFPC}{$H+}{$INLINE ON}{.$WARN 6058 OFF}
 
 uses
-  SysUtils, ucCHXTestGroup, ucCHXTWConsole;
+  SysUtils, ucCHXTestGroup, ucCHXTWConsole, ucCHXTWJSON;
 
 type
 
@@ -67,6 +67,8 @@ begin
   MainTest.AddChildTest(cTest1a);
   // Adding writer after child test... cTest1a must be written
   MainTest.AddWriter(cCHXTWConsole);
+  if ParamCount >= 1 then
+    cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON)).FileName := ParamStr(1);
   MainTest.AddChildTest(cTest1b);
   ExitCode := MainTest.RunAllCases;
   MainTest.Free;

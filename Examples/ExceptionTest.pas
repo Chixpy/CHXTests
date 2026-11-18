@@ -4,7 +4,8 @@ program ExceptionTest;
 {$MODESWITCH FunctionReferences}
 
 uses
-  SysUtils, ucCHXTestGroup, ucCHXTWConsole, utCHXTestResults;
+  SysUtils, ucCHXTestGroup, ucCHXTWConsole, ucCHXTWJSON,
+  utCHXTestResults;
 
 type
   EMyError = class(Exception);
@@ -78,6 +79,8 @@ var
 begin
   MainTest := cTestCases.Create;
   MainTest.AddWriter(cCHXTWConsole);
+  if ParamCount >= 1 then
+    cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON)).FileName := ParamStr(1);
   RunCode := MainTest.RunAllCases;
   Results := MainTest.TestResults;
   MainTest.Free;

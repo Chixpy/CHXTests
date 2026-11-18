@@ -5,7 +5,8 @@ program SubTests;
 {$MODE ObjFPC}{$H+}{$INLINE ON}{.$WARN 6058 OFF}
 
 uses
-  SysUtils, ucCHXTestGroup, ucCHXTWConsole, utCHXTestResults;
+  SysUtils, ucCHXTestGroup, ucCHXTWConsole, ucCHXTWJSON,
+  utCHXTestResults;
 
 type
 
@@ -64,6 +65,8 @@ var
 begin
   MainTest := cTest1.Create;
   MainTest.AddWriter(cCHXTWConsole);
+  if ParamCount >= 1 then
+    cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON)).FileName := ParamStr(1);
   MainTest.AddChildTest(cTest1a);
   MainTest.AddChildTest(cTest1b);
   ExitCode := MainTest.RunAllCases;

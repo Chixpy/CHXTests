@@ -32,8 +32,16 @@ type
     FFailures : tCHXTestFailureList;
     FPathStack : TStringList;
 
-    function CurrentPath : String;
     procedure AddFailure(const TestResult : tCHXTestResults);
+
+  protected
+    function CurrentPath : String;
+    {< Path of the group currently being processed.
+
+      The engine pushes a group name in `ProcessTestStart` before calling
+      `OnTestStart`, so during `OnTestStart` and `OnCaseEnd` this is the
+      containing group path. It is empty outside a run.
+    }
 
   public
     ShowSummary : Boolean;

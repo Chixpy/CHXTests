@@ -3,7 +3,7 @@ program SimplestTest;
 {$MODE ObjFPC}{$H+}{$INLINE ON}{.$WARN 6058 OFF} // Inline not inlined
 
 uses
-  ucCHXTestGroup, ucCHXTWConsole;
+  SysUtils, ucCHXTestGroup, ucCHXTWConsole, ucCHXTWJSON;
 
 type
 
@@ -37,6 +37,8 @@ begin
   MainTest := cTestCases.Create;
   // Writers added by class type are autofreed on test destroy.
   MainTest.AddWriter(cCHXTWConsole);
+  if ParamCount >= 1 then
+    cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON)).FileName := ParamStr(1);
   ExitCode := MainTest.RunAllCases;
   MainTest.Free;
 end.

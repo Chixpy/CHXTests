@@ -4,7 +4,8 @@ program SelfTest;
 {$MODESWITCH FunctionReferences}
 
 uses
-  SysUtils, ucCHXTestGroup, ucCHXTestWriter, ucCHXTWConsole,
+  SysUtils, fpjson, jsonparser,
+  ucCHXTestGroup, ucCHXTestWriter, ucCHXTWConsole, ucCHXTWJSON,
   utCHXTestResults;
 
 type
@@ -63,6 +64,11 @@ type
   cTargetEmpty = class(cCHXTestGroup)
   end;
 
+  cTargetJSONEscape = class(cCHXTestGroup)
+  published
+    procedure CaseEscape;
+  end;
+
   cSummaryRecorder = class(cCHXTestWriter)
   public
     AfterCalls : Integer;
@@ -83,6 +89,13 @@ type
     procedure CheckContains(const aLabel, aText, aSubText : String);
     function FindCase(const aGroup : cCHXTestGroup;
       const aCaseName : String) : tTestCase;
+    function JSONFindGroup(const aGroup : TJSONObject;
+      const aPath : String) : TJSONObject;
+    function JSONFindCase(const aGroup : TJSONObject;
+      const aName : String) : TJSONObject;
+    procedure CheckJSONInt(const aLabel : String;
+      const aObject : TJSONObject; const aName : String;
+      const aExpected : Int64);
     procedure RaiseExpectedMethod;
     procedure NoRaiseMethod;
     procedure InnerMustFail;
@@ -97,6 +110,7 @@ type
     procedure CheckDisabledSubtree;
     procedure CheckFailureCollection;
     procedure CheckSummary;
+    procedure CheckJSONWriter;
     procedure CheckRunCase;
     procedure CheckMustRaise;
     procedure CheckMustNotRaise;
@@ -128,6 +142,13 @@ begin
   SendInfo('first info line');
   SendInfo('second info line');
   MustTrue(False, 'Info failure.');
+end;
+
+procedure cTargetJSONEscape.CaseEscape;
+begin
+  SendInfo('quote " and newline' + LineEnding + 'next');
+  SendProgress('half', 50);
+  MustTrue(False, 'escape fail', 'message with "quotes"');
 end;
 
 {
@@ -630,6 +651,194 @@ begin
   finally
     Root.Free;
     Recorder.Free;
+  end;
+end;
+
+function cSelfTest.JSONFindGroup(const aGroup : TJSONObject;
+  const aPath : String) : TJSONObject;
+var
+  aData : TJSONData;
+  aGroups : TJSONArray;
+  aChild : TJSONObject;
+  i : Integer;
+begin
+  Result := nil;
+  if not Assigned(aGroup) then Exit;
+
+  if aGroup.Get('path', '') = aPath then
+    Exit(aGroup);
+
+  aData := aGroup.Find('groups', jtArray);
+  if not (aData is TJSONArray) then Exit;
+  aGroups := TJSONArray(aData);
+
+  for i := 0 to aGroups.Count - 1 do
+  begin
+    aChild := aGroups.Items[i] as TJSONObject;
+    Result := JSONFindGroup(aChild, aPath);
+    if Assigned(Result) then Exit;
+  end;
+end;
+
+function cSelfTest.JSONFindCase(const aGroup : TJSONObject;
+  const aName : String) : TJSONObject;
+var
+  aData : TJSONData;
+  aCases : TJSONArray;
+  aCase : TJSONObject;
+  i : Integer;
+begin
+  Result := nil;
+  if not Assigned(aGroup) then Exit;
+
+  aData := aGroup.Find('cases', jtArray);
+  if not (aData is TJSONArray) then Exit;
+  aCases := TJSONArray(aData);
+
+  for i := 0 to aCases.Count - 1 do
+  begin
+    aCase := aCases.Items[i] as TJSONObject;
+    if aCase.Get('name', '') = aName then
+      Exit(aCase);
+  end;
+end;
+
+procedure cSelfTest.CheckJSONInt(const aLabel : String;
+  const aObject : TJSONObject; const aName : String;
+  const aExpected : Int64);
+var
+  aActual : Int64;
+begin
+  if not Assigned(aObject) then
+  begin
+    MustTrue(False, aLabel, 'missing JSON object');
+    Exit;
+  end;
+
+  aActual := aObject.Get(aName, Int64(-1));
+  MustTrue(aActual = aExpected, aLabel,
+    Format('%s: got %d, expected %d',
+    [aLabel, aActual, aExpected]));
+end;
+
+procedure cSelfTest.CheckJSONWriter;
+var
+  Root : cCHXTestGroup;
+  Writer : cCHXTWJSON;
+  Data : TJSONData;
+  RootObj, Node, Counts, CaseNode : TJSONObject;
+  aData : TJSONData;
+  aCases : TJSONArray;
+  RunCode : Integer;
+begin
+  Root := cCHXTestGroup.Create('JSONRoot');
+  Writer := cCHXTWJSON(Root.AddWriter(cCHXTWJSON));
+  try
+    Writer.FileName := '';
+    Root.AddChildTest(cTargetPass, 'Pass');
+    Root.AddChildTest(cTargetFail, 'Fail');
+    Root.AddChildTest(cTargetError, 'Error');
+    Root.AddChildTest(cTargetInfoFail, 'Info');
+    Root.AddChildTest(cTargetEmpty, 'Empty');
+    Root.AddChildTest(cTargetJSONEscape, 'Escape');
+
+    RunCode := Root.RunAllCases;
+    CheckCode('json: code', RunCode, 2);
+    CheckText('json: save error', Writer.SaveError, '');
+    CheckContains('json: generator', Writer.Lines.Text,
+      '"generator": "CHXTests"');
+    CheckContains('json: schema', Writer.Lines.Text,
+      '"schemaVersion": 1');
+    CheckCode('json: no percent',
+      Integer(Pos('"percent"', Writer.Lines.Text)), 0);
+    CheckCode('json: no progress',
+      Integer(Pos('"progress":', LowerCase(Writer.Lines.Text))), 0);
+
+    Data := nil;
+    try
+      try
+        Data := GetJSON(Writer.Lines.Text);
+      except
+        on E: Exception do
+          MustTrue(False, 'json: parse', E.Message);
+      end;
+
+      MustTrue(Data is TJSONObject, 'json: root object');
+      if not (Data is TJSONObject) then Exit;
+      RootObj := TJSONObject(Data);
+
+      CheckText('json: name', RootObj.Get('name', ''), 'JSONRoot');
+      CheckText('json: path', RootObj.Get('path', ''), 'JSONRoot');
+      CheckText('json: result', RootObj.Get('result', ''), 'error');
+
+      aData := RootObj.Find('counts', jtObject);
+      MustTrue(aData is TJSONObject, 'json: root counts');
+      if aData is TJSONObject then
+      begin
+        Counts := TJSONObject(aData);
+        CheckJSONInt('json: asserts', Counts, 'asserts', 4);
+        CheckJSONInt('json: cases', Counts, 'cases', 5);
+        CheckJSONInt('json: groups', Counts, 'groups', 7);
+        CheckJSONInt('json: success', Counts, 'success', 1);
+        CheckJSONInt('json: skipped', Counts, 'skipped', 0);
+        CheckJSONInt('json: skipped groups',
+          Counts, 'skippedGroups', 1);
+        CheckJSONInt('json: failed', Counts, 'failed', 3);
+        CheckJSONInt('json: errors', Counts, 'errors', 1);
+      end;
+
+      Node := JSONFindGroup(RootObj, 'JSONRoot.Fail');
+      MustTrue(Assigned(Node), 'json: fail group');
+      CaseNode := JSONFindCase(Node, 'CaseFail');
+      MustTrue(Assigned(CaseNode), 'json: fail case');
+      CheckText('json: fail path', CaseNode.Get('path', ''),
+        'JSONRoot.Fail');
+      CheckText('json: fail result', CaseNode.Get('result', ''),
+        'failed');
+      CheckText('json: fail assert',
+        CaseNode.Get('failedAssert', ''), 'Intentional failure.');
+      CheckText('json: fail message', CaseNode.Get('message', ''),
+        rsNotTrue);
+
+      Node := JSONFindGroup(RootObj, 'JSONRoot.Info');
+      CaseNode := JSONFindCase(Node, 'CaseInfoFail');
+      MustTrue(Assigned(CaseNode), 'json: info case');
+      CheckText('json: info', CaseNode.Get('info', ''),
+        'first info line' + LineEnding + 'second info line');
+
+      Node := JSONFindGroup(RootObj, 'JSONRoot.Escape');
+      CaseNode := JSONFindCase(Node, 'CaseEscape');
+      MustTrue(Assigned(CaseNode), 'json: escape case');
+      CheckText('json: escape message',
+        CaseNode.Get('message', ''), 'message with "quotes"');
+      CheckText('json: escape info', CaseNode.Get('info', ''),
+        'quote " and newline' + LineEnding + 'next');
+
+      Node := JSONFindGroup(RootObj, 'JSONRoot.Empty');
+      MustTrue(Assigned(Node), 'json: empty group');
+      CheckText('json: empty result', Node.Get('result', ''), 'skip');
+      aData := Node.Find('counts', jtObject);
+      MustTrue(aData is TJSONObject, 'json: empty counts');
+      if aData is TJSONObject then
+      begin
+        Counts := TJSONObject(aData);
+        CheckJSONInt('json: empty cases', Counts, 'cases', 0);
+        CheckJSONInt('json: empty skipped groups',
+          Counts, 'skippedGroups', 1);
+      end;
+      aData := Node.Find('cases', jtArray);
+      MustTrue(aData is TJSONArray, 'json: empty case list');
+      if aData is TJSONArray then
+      begin
+        aCases := TJSONArray(aData);
+        CheckCount('json: empty case count',
+          Cardinal(aCases.Count), 0);
+      end;
+    finally
+      Data.Free;
+    end;
+  finally
+    Root.Free;
   end;
 end;
 

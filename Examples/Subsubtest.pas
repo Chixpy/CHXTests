@@ -6,7 +6,7 @@ program Subsubtests;
 {$MODE ObjFPC}{$H+}{$INLINE ON}{.$WARN 6058 OFF}
 
 uses
-  SysUtils, ucCHXTestGroup, ucCHXTWConsole;
+  SysUtils, ucCHXTestGroup, ucCHXTWConsole, ucCHXTWJSON;
 
 type
 
@@ -65,6 +65,8 @@ var
 begin
   MainTest := cTest1.Create;
   MainTest.AddWriter(cCHXTWConsole);
+  if ParamCount >= 1 then
+    cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON)).FileName := ParamStr(1);
   // Adding by class type, parent test frees it on destroy.
   SubTest := MainTest.AddChildTest(cTest1a);
   SubTest.AddChildTest(cTest1a1);

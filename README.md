@@ -6,7 +6,8 @@ failures, errors and skipped work.
 ## Building the examples
 
 Requirements: FPC 3.2+ (tested with 3.3.1). No external dependencies beyond
-the FPC RTL.
+the FPC distribution; the JSON example and self-test use the `fcl-json`
+package.
 
 From the `Examples/` directory:
 
@@ -25,8 +26,21 @@ The examples cover different parts of the runner:
   sets the number of iterations (default 10).
 - `SelfTest`: checks the runner itself. It exits with `0` when all expected
   results match and with `1` otherwise.
+- `JSONTest`: generates a JSON report with nested groups, failures, errors,
+  skips and escaped text, and verifies it with `fpjson`.
 - `SimplestTest`, `SubTests`, `Subsubtest`, `WriterAfterChild` and
   `WriterInChild`: minimal programs for groups, nesting and writer ownership.
+
+Except `ProgressTest`, `JSONTest` and `SelfTest`, the examples accept an
+optional output file as their first argument. When present, they also add a
+JSON writer and save the report there:
+
+```sh
+./bin/BasicTest results.json
+```
+
+`WriterInChild` attaches the JSON writer to the child group, so its document
+starts at that child instead of the main test.
 
 ## Simple use program
 
@@ -177,6 +191,59 @@ The console totals use separate strings for skipped groups and cases:
 `SkipGroupStr`, `SkipStr`, `SuccessStr`, `FailStr` and `ErrorStr` can be
 customized. The symbols and labels depend on the terminal and its font.
 
+## JSON writer
+
+`cCHXTWJSON` produces a machine-readable document. It never writes to the
+console and ignores `SendProgress`; `ShowSummary` has no effect.
+
+```pascal
+uses ucCHXTestGroup, ucCHXTWJSON;
+
+var
+  aWriter : cCHXTWJSON;
+...
+aWriter := cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON));
+aWriter.FileName := 'results.json';
+ExitCode := MainTest.RunAllCases;
+```
+
+The document is generated when the root group observed by the writer ends, so
+even a writer added only to a child produces its own subtree. `FileName` saves
+it automatically; `Lines` exposes the text and `SaveError` contains an I/O
+error instead of raising it.
+
+```json
+{
+  "generator": "CHXTests",
+  "schemaVersion": 1,
+  "name": "Root",
+  "path": "Root",
+  "result": "failed",
+  "durationMs": 12,
+  "counts": {
+    "asserts": 2, "cases": 2, "groups": 2,
+    "success": 1, "skipped": 0, "skippedGroups": 0,
+    "failed": 1, "errors": 0
+  },
+  "cases": [ ... ],
+  "groups": [ ... ]
+}
+```
+
+- Groups and cases are nested, and every node carries its `path`.
+- Cases include `result`, `asserts`, `durationMs`, `failedAssert`, `message`,
+  `backtrace` and `info`.
+- `counts.groups` is the subtree count including the group itself.
+- A disabled group is reported as `skip`; its cases are counted in
+  `counts.cases`/`counts.skipped` but do not appear in its `cases` array.
+- The output is deterministic: there is no timestamp, and durations are in
+  milliseconds.
+- A single `RunCase` call does not emit group events, so it produces no
+  document.
+
+`Examples/JSONTest.pas` shows a complete report and validates it with
+`fpjson`.
+
 ## Features
 
 - Nested groups, manually or from names with separators.
@@ -187,6 +254,7 @@ customized. The symbols and labels depend on the terminal and its font.
 - Statistics for time, assertions, cases and groups.
 - Exit codes suitable for batch use.
 - Collected failure/error summary with case information.
+- JSON writer for automated checks.
 
 ## Pending ideas
 
@@ -201,4 +269,4 @@ customized. The symbols and labels depend on the terminal and its font.
 - Select cases and groups with regular expressions.
 - Word wrap that preserves indentation in the console writer.
 - Configurable progress update interval.
-- Additional writers: JSON, XML, HTML and Markdown.
+- Additional writers: XML, HTML and Markdown.

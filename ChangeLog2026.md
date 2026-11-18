@@ -1,5 +1,42 @@
 # ChangeLog 2026
 
+## 2026-11-18 16:23
+
+Add the JSON writer for automated checks.
+
+### `ucCHXTestWriter.pas`
+- Move `CurrentPath` from `private` to `protected` so writers can label groups
+  and cases with the full path.
+
+### `ucCHXTWJSON.pas`
+- Add `cCHXTWJSON`, a dependency-free JSON writer with a nested group tree,
+  paths, counts, durations, case details and document metadata.
+- Generate the document when the observed root group ends; this also supports
+  writers attached only to a child.
+- Save automatically through `FileName`, expose `Lines` and `SaveError`, and
+  ignore progress and console output.
+
+### `Examples/JSONTest.pas`
+- Add a demo that writes `bin/JSONTest.json`, validates it with `fpjson` and
+  exits with `0` when the document matches.
+
+### `Examples/SelfTest.pas`
+- Add `CheckJSONWriter` plus an escaping target; SelfTest now runs 15 cases
+  with 218 assertions.
+
+### `Examples/*.pas`
+- Add the optional JSON writer to `BasicTest`, `ExceptionTest`,
+  `SimplestTest`, `SoftTest`, `SubTests`, `Subsubtest`, `WriterAfterChild`
+  and `WriterInChild`; their first argument is the output file.
+- Attach the JSON writer to the child group in `WriterInChild`.
+- Leave `ProgressTest`, `JSONTest` and `SelfTest` unchanged.
+
+### Documentation
+- README: document the JSON writer, its schema and limitations.
+- README/AGENTS: document the optional JSON output argument of the examples.
+- ToDo/AGENTS: remove the JSON item and refresh the layout and SelfTest
+  counts.
+
 ## 2026-11-18 01:37
 
 Document runner semantics and remove stale TODOs.

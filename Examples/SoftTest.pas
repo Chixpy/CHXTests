@@ -4,7 +4,8 @@ program SoftTest;
 {$MODESWITCH FunctionReferences}
 
 uses
-  ucCHXTestGroup, ucCHXTWConsole, utCHXTestResults;
+  SysUtils, ucCHXTestGroup, ucCHXTWConsole, ucCHXTWJSON,
+  utCHXTestResults;
 
 var
   ReachedAfterSoft : Boolean;
@@ -89,6 +90,8 @@ begin
 
   MainTest := cTestCases.Create;
   MainTest.AddWriter(cCHXTWConsole);
+  if ParamCount >= 1 then
+    cCHXTWJSON(MainTest.AddWriter(cCHXTWJSON)).FileName := ParamStr(1);
   RunCode := MainTest.RunAllCases;
   Results := MainTest.TestResults;
   MainTest.Free;
